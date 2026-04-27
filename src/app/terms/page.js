@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: '이용약관 | 메타인지 유니콘',
+  title: '이용약관 | 오늘배움봇',
 };
 
 export default function TermsPage() {
@@ -17,13 +17,13 @@ export default function TermsPage() {
               이용약관
             </h1>
             <p className="subtitle" style={{ marginBottom: 0 }}>
-              메타인지 유니콘은 앱뜰(App-Tteul) 플랫폼의 하위 프로그램으로 제공됩니다.
+              오늘배움봇은 앱뜰(App-Tteul) 플랫폼의 하위 프로그램으로 제공됩니다.
             </p>
           </div>
 
           <div className="legal-body">
             <p>
-              본 이용약관(이하 &apos;약관&apos;)은 메타인지 유니콘(이하 &apos;본 서비스&apos;)이
+              본 이용약관(이하 &apos;약관&apos;)은 오늘배움봇(이하 &apos;본 서비스&apos;)이
               제공하는 교육용 웹 애플리케이션 서비스의 이용에 관한 사항을 규정합니다.
             </p>
 
@@ -40,7 +40,7 @@ export default function TermsPage() {
               <h2>제2조 (정의)</h2>
               <ul>
                 <li>
-                  &apos;서비스&apos;란 앱뜰(App-Tteul) 플랫폼 내에서 제공되는 메타인지 유니콘
+                  &apos;서비스&apos;란 앱뜰(App-Tteul) 플랫폼 내에서 제공되는 오늘배움봇
                   프로그램을 말합니다.
                 </li>
                 <li>

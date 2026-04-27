@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: '개인정보 처리방침 | 메타인지 유니콘',
+  title: '개인정보 처리방침 | 오늘배움봇',
 };
 
 export default function PrivacyPage() {
@@ -17,13 +17,13 @@ export default function PrivacyPage() {
               개인정보 처리방침
             </h1>
             <p className="subtitle" style={{ marginBottom: 0 }}>
-              메타인지 유니콘은 앱뜰(App-Tteul) 플랫폼의 하위 프로그램으로 제공됩니다.
+              오늘배움봇은 앱뜰(App-Tteul) 플랫폼의 하위 프로그램으로 제공됩니다.
             </p>
           </div>
 
           <div className="legal-body">
             <p>
-              메타인지 유니콘(이하 &apos;본 서비스&apos;)은 개인정보 보호법 제30조에 따라
+              오늘배움봇(이하 &apos;본 서비스&apos;)은 개인정보 보호법 제30조에 따라
               정보주체의 개인정보를 보호하고 이와 관련한 고충을 신속하고 원활하게 처리할 수
               있도록 하기 위하여 다음과 같이 개인정보 처리방침을 수립·공개합니다.
             </p>

@@ -10,8 +10,7 @@ import { getTeacherSettings, saveTeacherSettings } from '@/lib/firestore';
 
 export default function TeacherSettings() {
   const router = useRouter();
-  const mathDefaults = getTeacherConstraintDefaults({}, 'math');
-  const artDefaults = getTeacherConstraintDefaults({}, 'art');
+  const mathDefaults = getTeacherConstraintDefaults({});
   const lengthExamples = getChatLengthExamples();
   const [user, setUser] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -22,11 +21,12 @@ export default function TeacherSettings() {
     growndApiKey: '',
     defaultMathMinTurns: mathDefaults.minTurns,
     defaultMathMaxTurns: mathDefaults.maxTurns,
-    defaultArtMinTurns: artDefaults.minTurns,
-    defaultArtMaxTurns: artDefaults.maxTurns,
     defaultMinStudentMessageBytes: mathDefaults.minStudentMessageBytes,
     defaultMaxStudentMessageBytes: mathDefaults.maxStudentMessageBytes,
+    students: [],
   });
+
+  const [newStudent, setNewStudent] = useState({ name: '', password: '', code: '' });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -43,10 +43,9 @@ export default function TeacherSettings() {
           growndApiKey: existing.growndApiKey || '',
           defaultMathMinTurns: existing.defaultMathMinTurns ?? mathDefaults.minTurns,
           defaultMathMaxTurns: existing.defaultMathMaxTurns ?? mathDefaults.maxTurns,
-          defaultArtMinTurns: existing.defaultArtMinTurns ?? artDefaults.minTurns,
-          defaultArtMaxTurns: existing.defaultArtMaxTurns ?? artDefaults.maxTurns,
           defaultMinStudentMessageBytes: existing.defaultMinStudentMessageBytes ?? mathDefaults.minStudentMessageBytes,
           defaultMaxStudentMessageBytes: existing.defaultMaxStudentMessageBytes ?? mathDefaults.maxStudentMessageBytes,
+          students: Array.isArray(existing.students) ? existing.students : [],
         });
       }
     });
@@ -64,10 +63,9 @@ export default function TeacherSettings() {
         growndApiKey: settings.growndApiKey,
         defaultMathMinTurns: settings.defaultMathMinTurns,
         defaultMathMaxTurns: settings.defaultMathMaxTurns,
-        defaultArtMinTurns: settings.defaultArtMinTurns,
-        defaultArtMaxTurns: settings.defaultArtMaxTurns,
         defaultMinStudentMessageBytes: settings.defaultMinStudentMessageBytes,
         defaultMaxStudentMessageBytes: settings.defaultMaxStudentMessageBytes,
+        students: settings.students,
         email: user.email,
         displayName: user.displayName,
       });
@@ -80,23 +78,177 @@ export default function TeacherSettings() {
     setSaving(false);
   };
 
+  const addStudent = () => {
+    if (!newStudent.name.trim() || !newStudent.password.trim()) {
+      alert('이름과 비밀번호를 입력해주세요.');
+      return;
+    }
+
+    const nextCode = newStudent.code
+      ? Number(newStudent.code)
+      : (settings.students.length > 0
+          ? Math.max(...settings.students.map((s) => s.code)) + 1
+          : 1);
+
+    setSettings((prev) => ({
+      ...prev,
+      students: [
+        ...prev.students,
+        { name: newStudent.name.trim(), password: newStudent.password, code: nextCode },
+      ],
+    }));
+    setNewStudent({ name: '', password: '', code: '' });
+  };
+
+  const removeStudent = (index) => {
+    setSettings((prev) => ({
+      ...prev,
+      students: prev.students.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateStudent = (index, field, value) => {
+    setSettings((prev) => {
+      const next = [...prev.students];
+      next[index] = { ...next[index], [field]: field === 'code' ? Number(value) : value };
+      return { ...prev, students: next };
+    });
+  };
+
   if (!user) return null;
 
   return (
     <div className="page-container">
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
-          <span className="emoji">🦄</span> 메타인지 유니콘
+          <span className="emoji">🤖</span> 오늘배움봇
         </Link>
         <Link href="/teacher" className="btn btn-ghost btn-sm">← 대시보드</Link>
       </nav>
 
       <div className="content-wrapper content-narrow">
         <h1 className="heading-section">⚙️ 설정</h1>
-        <p className="subtitle">Grownd 연동 정보를 입력하세요</p>
 
         <form onSubmit={handleSave}>
-          <div className="card-glass">
+          {/* 학생 목록 */}
+          <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+              🎒 학생 목록 (이름 / 비밀번호 / Grownd 번호)
+            </h3>
+            <p className="form-hint" style={{ marginBottom: '1rem' }}>
+              학생이 입장할 때 이름과 비밀번호로 로그인합니다. Grownd 번호는 포인트 전송에 사용됩니다.
+            </p>
+
+            {settings.students.length > 0 && (
+              <div style={{ marginBottom: '1rem' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <th style={{ padding: '0.5rem', textAlign: 'left', color: 'var(--text-secondary)', fontWeight: 500 }}>이름</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'left', color: 'var(--text-secondary)', fontWeight: 500 }}>비밀번호</th>
+                      <th style={{ padding: '0.5rem', textAlign: 'center', color: 'var(--text-secondary)', fontWeight: 500, width: '80px' }}>번호</th>
+                      <th style={{ width: '48px' }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {settings.students.map((student, index) => (
+                      <tr key={index} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                        <td style={{ padding: '0.4rem 0.5rem' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ padding: '0.35rem 0.6rem', fontSize: '0.88rem' }}
+                            value={student.name}
+                            onChange={(e) => updateStudent(index, 'name', e.target.value)}
+                          />
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem' }}>
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ padding: '0.35rem 0.6rem', fontSize: '0.88rem' }}
+                            value={student.password}
+                            onChange={(e) => updateStudent(index, 'password', e.target.value)}
+                          />
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem' }}>
+                          <input
+                            type="number"
+                            min="1"
+                            max="99"
+                            className="form-input"
+                            style={{ padding: '0.35rem 0.4rem', fontSize: '0.88rem', textAlign: 'center' }}
+                            value={student.code}
+                            onChange={(e) => updateStudent(index, 'code', e.target.value)}
+                          />
+                        </td>
+                        <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            style={{ padding: '0.25rem 0.5rem' }}
+                            onClick={() => removeStudent(index)}
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 학생 추가 행 */}
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+              <div className="form-group" style={{ marginBottom: 0, flex: 2, minWidth: '100px' }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>이름</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="홍길동"
+                  value={newStudent.name}
+                  onChange={(e) => setNewStudent((prev) => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addStudent())}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0, flex: 2, minWidth: '100px' }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>비밀번호</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="1234"
+                  value={newStudent.password}
+                  onChange={(e) => setNewStudent((prev) => ({ ...prev, password: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addStudent())}
+                />
+              </div>
+              <div className="form-group" style={{ marginBottom: 0, width: '80px' }}>
+                <label className="form-label" style={{ fontSize: '0.8rem' }}>번호</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  className="form-input"
+                  placeholder="자동"
+                  value={newStudent.code}
+                  onChange={(e) => setNewStudent((prev) => ({ ...prev, code: e.target.value }))}
+                  onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addStudent())}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                style={{ marginBottom: 0 }}
+                onClick={addStudent}
+              >
+                + 추가
+              </button>
+            </div>
+          </div>
+
+          {/* Grownd 설정 */}
+          <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
               🌱 Grownd API 설정
             </h3>
@@ -111,7 +263,6 @@ export default function TeacherSettings() {
                 value={settings.growndClassId}
                 onChange={(e) => setSettings(prev => ({ ...prev, growndClassId: e.target.value }))}
               />
-              <p className="form-hint">그라운드 학급의 클래스 ID를 입력하세요</p>
             </div>
 
             <div className="form-group">
@@ -124,175 +275,100 @@ export default function TeacherSettings() {
                 value={settings.growndApiKey}
                 onChange={(e) => setSettings(prev => ({ ...prev, growndApiKey: e.target.value }))}
               />
-              <p className="form-hint">그라운드에서 발급받은 API 키를 입력하세요</p>
+              <p className="form-hint">채팅 완료 시 해당 학생의 Grownd 번호로 포인트가 자동 전송됩니다.</p>
             </div>
-
-            <div
-              style={{
-                marginBottom: '1.5rem',
-                padding: '1rem',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-color)',
-                background: 'rgba(255, 255, 255, 0.03)',
-              }}
-            >
-              <h4 style={{ marginBottom: '1rem', fontSize: '0.95rem', color: 'var(--purple-light)' }}>
-                새 과제 기본값
-              </h4>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">수학 최소/최대 턴</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <input
-                      type="number"
-                      min="1"
-                      max={settings.defaultMathMaxTurns}
-                      className="form-input"
-                      value={settings.defaultMathMinTurns}
-                      onChange={(e) => {
-                        const nextValue = Number(e.target.value || 1);
-                        setSettings((prev) => ({
-                          ...prev,
-                          defaultMathMinTurns: nextValue,
-                          defaultMathMaxTurns: Math.max(prev.defaultMathMaxTurns, nextValue),
-                        }));
-                      }}
-                    />
-                    <input
-                      type="number"
-                      min={settings.defaultMathMinTurns}
-                      max="12"
-                      className="form-input"
-                      value={settings.defaultMathMaxTurns}
-                      onChange={(e) => {
-                        const nextValue = Number(e.target.value || settings.defaultMathMinTurns);
-                        setSettings((prev) => ({
-                          ...prev,
-                          defaultMathMaxTurns: Math.max(nextValue, prev.defaultMathMinTurns),
-                        }));
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">미술 최소/최대 턴</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                    <input
-                      type="number"
-                      min="1"
-                      max={settings.defaultArtMaxTurns}
-                      className="form-input"
-                      value={settings.defaultArtMinTurns}
-                      onChange={(e) => {
-                        const nextValue = Number(e.target.value || 1);
-                        setSettings((prev) => ({
-                          ...prev,
-                          defaultArtMinTurns: nextValue,
-                          defaultArtMaxTurns: Math.max(prev.defaultArtMaxTurns, nextValue),
-                        }));
-                      }}
-                    />
-                    <input
-                      type="number"
-                      min={settings.defaultArtMinTurns}
-                      max="12"
-                      className="form-input"
-                      value={settings.defaultArtMaxTurns}
-                      onChange={(e) => {
-                        const nextValue = Number(e.target.value || settings.defaultArtMinTurns);
-                        setSettings((prev) => ({
-                          ...prev,
-                          defaultArtMaxTurns: Math.max(nextValue, prev.defaultArtMinTurns),
-                        }));
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">학생 답변 길이 기본값</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                  <input
-                    type="number"
-                    min="1"
-                    max={settings.defaultMaxStudentMessageBytes}
-                    className="form-input"
-                    value={settings.defaultMinStudentMessageBytes}
-                    onChange={(e) => {
-                      const nextValue = Number(e.target.value || 1);
-                      setSettings((prev) => ({
-                        ...prev,
-                        defaultMinStudentMessageBytes: nextValue,
-                        defaultMaxStudentMessageBytes: Math.max(prev.defaultMaxStudentMessageBytes, nextValue),
-                      }));
-                    }}
-                  />
-                  <input
-                    type="number"
-                    min={settings.defaultMinStudentMessageBytes}
-                    max="4000"
-                    className="form-input"
-                    value={settings.defaultMaxStudentMessageBytes}
-                    onChange={(e) => {
-                      const nextValue = Number(e.target.value || settings.defaultMinStudentMessageBytes);
-                      setSettings((prev) => ({
-                        ...prev,
-                        defaultMaxStudentMessageBytes: Math.max(nextValue, prev.defaultMinStudentMessageBytes),
-                      }));
-                    }}
-                  />
-                </div>
-                <p className="form-hint" style={{ marginTop: '0.75rem' }}>
-                  바이트 예시: {lengthExamples.map((example) => `${example.label} ${example.bytes}B`).join(' · ')}
-                </p>
-                <div style={{ display: 'grid', gap: '0.5rem', marginTop: '0.75rem' }}>
-                  {lengthExamples.map((example) => (
-                    <div
-                      key={example.label}
-                      style={{
-                        padding: '0.75rem 0.9rem',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: '1px solid var(--border-color)',
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.88rem',
-                      }}
-                    >
-                      <strong style={{ color: 'var(--text-primary)' }}>{example.label}</strong> · {example.bytes}B
-                      <div style={{ marginTop: '0.35rem' }}>{example.text}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <button
-              id="btn-save-settings"
-              type="submit"
-              className="btn btn-primary"
-              style={{ width: '100%' }}
-              disabled={saving}
-            >
-              {saving ? '저장 중...' : saved ? '✅ 저장 완료!' : '💾 저장'}
-            </button>
           </div>
-        </form>
 
-        {/* Info */}
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <h4 style={{ fontSize: '0.9rem', marginBottom: '0.75rem', color: 'var(--text-secondary)' }}>
-            📖 설정 방법
-          </h4>
-          <ol style={{ fontSize: '0.85rem', color: 'var(--text-muted)', paddingLeft: '1.25rem', lineHeight: 2 }}>
-            <li><a href="https://growndcard.com" target="_blank" style={{ color: 'var(--cyan-primary)' }}>growndcard.com</a>에 로그인</li>
-            <li>설정에서 API 키를 발급</li>
-            <li>클래스 ID와 API 키를 위에 입력</li>
-            <li>저장하면 채점 시 자동으로 포인트가 부여됩니다!</li>
-          </ol>
-        </div>
+          {/* 대화 기본값 */}
+          <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+              💬 새 과제 기본값
+            </h3>
+
+            <div className="form-group">
+              <label className="form-label">수학 최소 / 최대 턴</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <input
+                  type="number"
+                  min="1"
+                  max={settings.defaultMathMaxTurns}
+                  className="form-input"
+                  value={settings.defaultMathMinTurns}
+                  onChange={(e) => {
+                    const v = Number(e.target.value || 1);
+                    setSettings((prev) => ({
+                      ...prev,
+                      defaultMathMinTurns: v,
+                      defaultMathMaxTurns: Math.max(prev.defaultMathMaxTurns, v),
+                    }));
+                  }}
+                />
+                <input
+                  type="number"
+                  min={settings.defaultMathMinTurns}
+                  max="12"
+                  className="form-input"
+                  value={settings.defaultMathMaxTurns}
+                  onChange={(e) => {
+                    const v = Number(e.target.value || settings.defaultMathMinTurns);
+                    setSettings((prev) => ({
+                      ...prev,
+                      defaultMathMaxTurns: Math.max(v, prev.defaultMathMinTurns),
+                    }));
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">학생 답변 길이 기본값 (최소 / 최대 바이트)</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <input
+                  type="number"
+                  min="1"
+                  max={settings.defaultMaxStudentMessageBytes}
+                  className="form-input"
+                  value={settings.defaultMinStudentMessageBytes}
+                  onChange={(e) => {
+                    const v = Number(e.target.value || 1);
+                    setSettings((prev) => ({
+                      ...prev,
+                      defaultMinStudentMessageBytes: v,
+                      defaultMaxStudentMessageBytes: Math.max(prev.defaultMaxStudentMessageBytes, v),
+                    }));
+                  }}
+                />
+                <input
+                  type="number"
+                  min={settings.defaultMinStudentMessageBytes}
+                  max="4000"
+                  className="form-input"
+                  value={settings.defaultMaxStudentMessageBytes}
+                  onChange={(e) => {
+                    const v = Number(e.target.value || settings.defaultMinStudentMessageBytes);
+                    setSettings((prev) => ({
+                      ...prev,
+                      defaultMaxStudentMessageBytes: Math.max(v, prev.defaultMinStudentMessageBytes),
+                    }));
+                  }}
+                />
+              </div>
+              <p className="form-hint" style={{ marginTop: '0.75rem' }}>
+                바이트 예시: {lengthExamples.map((ex) => `${ex.label} ${ex.bytes}B`).join(' · ')}
+              </p>
+            </div>
+          </div>
+
+          <button
+            id="btn-save-settings"
+            type="submit"
+            className="btn btn-primary"
+            style={{ width: '100%' }}
+            disabled={saving}
+          >
+            {saving ? '저장 중...' : saved ? '✅ 저장 완료!' : '💾 저장'}
+          </button>
+        </form>
       </div>
     </div>
   );

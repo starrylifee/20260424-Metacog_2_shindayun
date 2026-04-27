@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 export const metadata = {
-  title: '가정통신문 예시 | 메타인지 유니콘',
+  title: '가정통신문 예시 | 오늘배움봇',
 };
 
 export default function ConsentSamplePage() {
@@ -17,7 +17,7 @@ export default function ConsentSamplePage() {
               가정통신문 예시
             </h1>
             <p className="subtitle" style={{ marginBottom: 0 }}>
-              메타인지 유니콘 및 Grownd 연동 안내용 예시 문안입니다.
+              오늘배움봇 및 Grownd 연동 안내용 예시 문안입니다.
             </p>
           </div>
 
@@ -34,7 +34,7 @@ export default function ConsentSamplePage() {
               <p>학부모님 안녕하십니까.</p>
               <p>
                 본교에서는 학생의 수업 이해를 돕고 자기설명 활동을 지원하기 위해 교육용 웹 프로그램
-                '메타인지 유니콘'을 활용하고자 합니다. 메타인지 유니콘은 앱뜰(App-Tteul)
+                '오늘배움봇'을 활용하고자 합니다. 오늘배움봇은 앱뜰(App-Tteul)
                 플랫폼의 하위 프로그램으로, 학생이 오늘 배운 내용을 자기 말로 설명하면 AI가 관련
                 질문과 피드백을 제공하는 학습 도구입니다.
               </p>
@@ -59,7 +59,7 @@ export default function ConsentSamplePage() {
                   동의 거부 권리: 보호자는 위 개인정보 수집·이용에 동의하지 않을 권리가 있습니다.
                 </li>
                 <li>
-                  거부 시 불이익: 메타인지 유니콘을 활용한 수업 참여 및 AI 피드백 제공이 제한될 수
+                  거부 시 불이익: 오늘배움봇을 활용한 수업 참여 및 AI 피드백 제공이 제한될 수
                   있습니다.
                 </li>
               </ul>
@@ -77,7 +77,7 @@ export default function ConsentSamplePage() {
                   동의 거부 권리: 보호자는 개인정보 제3자 제공에 동의하지 않을 권리가 있습니다.
                 </li>
                 <li>
-                  거부 시 불이익: 메타인지 유니콘 학습 참여는 가능하나, Grownd 포인트 지급은 제한될 수
+                  거부 시 불이익: 오늘배움봇 학습 참여는 가능하나, Grownd 포인트 지급은 제한될 수
                   있습니다.
                 </li>
               </ul>
@@ -96,7 +96,7 @@ export default function ConsentSamplePage() {
             <section className="legal-section">
               <h2>4. 안내</h2>
               <p>
-                메타인지 유니콘의 자세한 개인정보 처리 내용은 서비스 하단의
+                오늘배움봇의 자세한 개인정보 처리 내용은 서비스 하단의
                 <Link href="/privacy" style={{ marginLeft: '0.35rem', color: 'var(--cyan-primary)' }}>
                   개인정보 처리방침
                 </Link>

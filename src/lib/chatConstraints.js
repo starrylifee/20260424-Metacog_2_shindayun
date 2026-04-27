@@ -4,11 +4,6 @@ const TURN_LIMITS = {
     maxTurns: 3,
     legacyMaxTurns: 3,
   },
-  art: {
-    minTurns: 5,
-    maxTurns: 5,
-    legacyMaxTurns: 10,
-  },
 };
 
 const LEGACY_DEFAULT_MIN_STUDENT_MESSAGE_BYTES = 15;
@@ -65,12 +60,12 @@ export function getChatLengthExamples() {
   }));
 }
 
-export function getDefaultTurnLimits(type = 'math') {
-  return TURN_LIMITS[type === 'art' ? 'art' : 'math'];
+export function getDefaultTurnLimits() {
+  return TURN_LIMITS.math;
 }
 
-export function getDefaultAssignmentConstraints(type = 'math') {
-  const turnDefaults = getDefaultTurnLimits(type);
+export function getDefaultAssignmentConstraints() {
+  const turnDefaults = getDefaultTurnLimits();
 
   return {
     minTurns: turnDefaults.minTurns,
@@ -80,25 +75,24 @@ export function getDefaultAssignmentConstraints(type = 'math') {
   };
 }
 
-export function getLegacyMaxTurns(type = 'math') {
-  return getDefaultTurnLimits(type).legacyMaxTurns;
+export function getLegacyMaxTurns() {
+  return getDefaultTurnLimits().legacyMaxTurns;
 }
 
-export function getTeacherConstraintDefaults(settings = {}, type = 'math') {
-  const isArt = type === 'art';
-  const assignmentDefaults = getDefaultAssignmentConstraints(type);
+export function getTeacherConstraintDefaults(settings = {}) {
+  const assignmentDefaults = getDefaultAssignmentConstraints();
   const maxTurnsFallback = assignmentDefaults.maxTurns;
   const minTurnsFallback = assignmentDefaults.minTurns;
 
   const maxTurns = clampInteger(
-    isArt ? settings.defaultArtMaxTurns : settings.defaultMathMaxTurns,
+    settings.defaultMathMaxTurns,
     1,
     12,
     maxTurnsFallback
   );
 
   const minTurns = clampInteger(
-    isArt ? settings.defaultArtMinTurns : settings.defaultMathMinTurns,
+    settings.defaultMathMinTurns,
     1,
     maxTurns,
     Math.min(minTurnsFallback, maxTurns)
@@ -125,9 +119,8 @@ export function getTeacherConstraintDefaults(settings = {}, type = 'math') {
 }
 
 export function normalizeAssignmentConstraints(assignment = {}) {
-  const type = assignment.type === 'art' ? 'art' : 'math';
-  const defaults = getDefaultAssignmentConstraints(type);
-  const legacyMaxTurns = getLegacyMaxTurns(type);
+  const defaults = getDefaultAssignmentConstraints();
+  const legacyMaxTurns = getLegacyMaxTurns();
 
   const explicitMaxTurns = Number(assignment.maxTurns);
   const maxTurns = Number.isFinite(explicitMaxTurns) && explicitMaxTurns >= 1
@@ -161,10 +154,16 @@ export function normalizeAssignmentConstraints(assignment = {}) {
   };
 }
 
+export function bytesToApproxChars(bytes) {
+  return Math.round(bytes / 3);
+}
+
 export function formatStudentMessageByteRange(minBytes, maxBytes) {
   if (!Number.isFinite(minBytes) || !Number.isFinite(maxBytes)) {
     return '-';
   }
 
-  return `${minBytes}B ~ ${maxBytes}B`;
+  const minChars = Math.ceil(minBytes / 3);
+  const maxChars = Math.floor(maxBytes / 3);
+  return `약 ${minChars}~${maxChars}글자`;
 }

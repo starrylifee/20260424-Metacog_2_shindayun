@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-import { buildArtAssignmentContent, buildArtAssignmentTitle } from '@/lib/artAssignment';
 import { generateUniqueEntryCode } from '@/lib/assignmentEntryCode';
 import { normalizeAssignmentConstraints } from '@/lib/chatConstraints';
 import { authenticateFirebaseRequest, RequestError } from '@/lib/serverAuth';
@@ -21,9 +20,19 @@ export async function GET(request) {
       .orderBy('createdAt', 'desc')
       .get();
 
+    const assignmentDocs = snapshot.docs;
+    const countResults = await Promise.all(
+      assignmentDocs.map((doc) =>
+        adminDb.collection('conversations').where('assignmentId', '==', doc.id).count().get()
+      )
+    );
+
     return NextResponse.json({
       success: true,
-      assignments: snapshot.docs.map(serializeDoc),
+      assignments: assignmentDocs.map((doc, i) => ({
+        ...serializeDoc(doc),
+        participantCount: countResults[i].data().count,
+      })),
     });
   } catch (error) {
     if (error instanceof RequestError) {
@@ -53,54 +62,27 @@ export async function POST(request) {
       maxTurns = null,
       minStudentMessageBytes = null,
       maxStudentMessageBytes = null,
-      type = 'math',
-      paintingTitle = '',
-      artist = '',
-      year = '',
-      imageUrl = '',
-      paintingContext = '',
-      appreciationLevel = null,
-      appreciationLevelLabel = '',
-      appreciationPrompt = '',
-      difficultyLevel = '',
-      difficultyLabel = '',
-      difficultyPrompt = '',
     } = body;
 
+    if (!title.trim()) {
+      return NextResponse.json({ success: false, error: '과제 제목을 입력해 주세요.' }, { status: 400 });
+    }
+
+    if (!content.trim()) {
+      return NextResponse.json({ success: false, error: '수업 내용을 입력해 주세요.' }, { status: 400 });
+    }
+
+    const validatedScoreOptions = validateScoreOptions(scoreOptions);
+    if (!validatedScoreOptions.ok) {
+      return NextResponse.json({ success: false, error: validatedScoreOptions.error }, { status: 400 });
+    }
+
     const normalizedConstraints = normalizeAssignmentConstraints({
-      type,
       minTurns,
       maxTurns,
       minStudentMessageBytes,
       maxStudentMessageBytes,
     });
-
-    const normalizedTitle =
-      type === 'art'
-        ? buildArtAssignmentTitle({ title, paintingTitle, artist })
-        : title.trim();
-
-    if (type !== 'art' && !normalizedTitle) {
-      return NextResponse.json(
-        { success: false, error: '과제 제목을 입력해 주세요.' },
-        { status: 400 }
-      );
-    }
-
-    if (type !== 'art' && !content.trim()) {
-      return NextResponse.json(
-        { success: false, error: '수업 내용을 입력해 주세요.' },
-        { status: 400 }
-      );
-    }
-
-    const validatedScoreOptions = validateScoreOptions(scoreOptions);
-    if (!validatedScoreOptions.ok) {
-      return NextResponse.json(
-        { success: false, error: validatedScoreOptions.error },
-        { status: 400 }
-      );
-    }
 
     let entryCode;
     try {
@@ -115,20 +97,17 @@ export async function POST(request) {
     const assignmentData = {
       teacherId: teacher.uid,
       entryCode,
-      type,
-      title: normalizedTitle,
+      type: 'math',
+      title: title.trim(),
       subject: subject.trim(),
       grade: grade.trim(),
       learningObjective: learningObjective.trim(),
-      content:
-        type === 'art'
-          ? content.trim() || buildArtAssignmentContent({ paintingTitle, artist, year })
-          : content.trim(),
+      content: content.trim(),
       keywords: Array.isArray(keywords)
-        ? keywords.map((keyword) => String(keyword).trim()).filter(Boolean)
+        ? keywords.map((k) => String(k).trim()).filter(Boolean)
         : [],
       standards: Array.isArray(standards)
-        ? standards.map((standard) => String(standard).trim()).filter(Boolean)
+        ? standards.map((s) => String(s).trim()).filter(Boolean)
         : [],
       scoreOptions: validatedScoreOptions.scoreOptions,
       maxScore: validatedScoreOptions.maxScore,
@@ -142,28 +121,11 @@ export async function POST(request) {
       updatedAt: FieldValue.serverTimestamp(),
     };
 
-    if (type === 'art') {
-      assignmentData.paintingTitle = String(paintingTitle).trim();
-      assignmentData.artist = String(artist).trim();
-      assignmentData.year = String(year).trim();
-      assignmentData.imageUrl = String(imageUrl).trim();
-      assignmentData.paintingContext = String(paintingContext).trim();
-      assignmentData.appreciationLevel = appreciationLevel;
-      assignmentData.appreciationLevelLabel = String(appreciationLevelLabel).trim();
-      assignmentData.appreciationPrompt = String(appreciationPrompt).trim();
-      assignmentData.difficultyLevel = String(difficultyLevel).trim();
-      assignmentData.difficultyLabel = String(difficultyLabel).trim();
-      assignmentData.difficultyPrompt = String(difficultyPrompt).trim();
-    }
-
     const docRef = await adminDb.collection('assignments').add(assignmentData);
 
     return NextResponse.json({
       success: true,
-      assignment: {
-        id: docRef.id,
-        entryCode,
-      },
+      assignment: { id: docRef.id, entryCode },
     });
   } catch (error) {
     if (error instanceof RequestError) {

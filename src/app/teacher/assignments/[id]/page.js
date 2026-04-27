@@ -22,32 +22,12 @@ import {
   getScoringStyleLabel,
 } from '@/lib/scoreConfig';
 
-function canApproveConversation(conversation) {
-  return (
-    conversation.status === 'completed' &&
-    !conversation.approved &&
-    conversation.approvalStatus !== 'processing'
-  );
-}
-
 function canResetConversation(conversation) {
-  return !conversation.approved && conversation.approvalStatus !== 'processing';
+  return !conversation.approved;
 }
 
 function formatConversationScore(score) {
   return Number.isFinite(score) ? `${score}점` : '-';
-}
-
-const STAGE_BADGES = [
-  { stage: 1, emoji: '👀', label: '탐험가' },
-  { stage: 2, emoji: '🔍', label: '분석가' },
-  { stage: 3, emoji: '💭', label: '상상가' },
-  { stage: 4, emoji: '⚖️', label: '평론가' },
-];
-
-function formatReachedStage(reachedStage) {
-  if (!reachedStage || reachedStage < 1 || reachedStage > 4) return null;
-  return STAGE_BADGES.filter((b) => b.stage <= reachedStage);
 }
 
 export default function AssignmentDetail() {
@@ -64,6 +44,14 @@ export default function AssignmentDetail() {
   const [actionLoading, setActionLoading] = useState(null);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [codeCopied, setCodeCopied] = useState(false);
+
+  const copyEntryCode = (code) => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCodeCopied(true);
+      setTimeout(() => setCodeCopied(false), 2000);
+    });
+  };
 
   const scoreOptions = useMemo(
     () => (assignment ? getAssignmentScoreOptions(assignment) : []),
@@ -85,10 +73,8 @@ export default function AssignmentDetail() {
         router.push('/teacher');
         return;
       }
-
       setUser(nextUser);
     });
-
     return () => unsubscribe();
   }, [router]);
 
@@ -127,10 +113,8 @@ export default function AssignmentDetail() {
       setConversations(nextConversations);
 
       if (selectedConv) {
-        const refreshedSelection = nextConversations.find(
-          (conversation) => conversation.id === selectedConv.id
-        );
-        setSelectedConv(refreshedSelection || null);
+        const refreshed = nextConversations.find((c) => c.id === selectedConv.id);
+        setSelectedConv(refreshed || null);
       }
     } catch (error) {
       console.error('Conversation load error:', error);
@@ -150,22 +134,11 @@ export default function AssignmentDetail() {
     void loadData();
   }, [user, id]);
 
-  const getAuthHeaders = async () => {
-    const token = await user.getIdToken();
-    return {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    };
-  };
-
   const handleToggle = async () => {
     if (!assignment) return;
-
-    const nextIsActive = !assignment.isActive;
-
     try {
-      await toggleAssignment(id, nextIsActive);
-      setAssignment((prev) => ({ ...prev, isActive: nextIsActive }));
+      await toggleAssignment(id, !assignment.isActive);
+      setAssignment((prev) => ({ ...prev, isActive: !prev.isActive }));
     } catch (error) {
       console.error('Toggle assignment error:', error);
       alert('과제 상태를 변경하지 못했습니다.');
@@ -174,13 +147,9 @@ export default function AssignmentDetail() {
 
   const handleDeleteAssignment = async () => {
     if (!assignment) return;
-
-    if (!confirm(`"${assignment.title}" 과제를 삭제할까요?\n삭제 후에는 되돌릴 수 없습니다.`)) {
-      return;
-    }
+    if (!confirm(`"${assignment.title}" 과제를 삭제할까요?\n삭제 후에는 되돌릴 수 없습니다.`)) return;
 
     setActionLoading('delete-assignment');
-
     try {
       await deleteAssignment(id);
       router.push('/teacher');
@@ -193,9 +162,7 @@ export default function AssignmentDetail() {
 
   const handleDuplicateAssignment = async () => {
     if (!assignment) return;
-
     setActionLoading('duplicate-assignment');
-
     try {
       const duplicated = await duplicateAssignment(id);
       router.push(`/teacher/assignments/edit?id=${duplicated.id}`);
@@ -206,173 +173,21 @@ export default function AssignmentDetail() {
     }
   };
 
-  const handleApprove = async (conversation) => {
-    if (!canApproveConversation(conversation)) {
-      return;
-    }
-
-    if (!confirm(`${conversation.studentCode}번 학생 제출을 승인할까요?`)) {
-      return;
-    }
-
-    setActionLoading(conversation.id);
-
-    try {
-      const headers = await getAuthHeaders();
-      const response = await fetch('/api/approve', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ conversationId: conversation.id }),
-      });
-      const data = await response.json();
-
-      if (!data.success) {
-        const detail = data.growndResult
-          ? `\n\n[Grownd 응답]\n${JSON.stringify(data.growndResult, null, 2)}`
-          : '';
-        alert((data.error || '승인 처리에 실패했습니다.') + detail);
-      }
-
-      await loadData();
-    } catch (error) {
-      console.error('Approve error:', error);
-      alert('승인 처리 중 오류가 발생했습니다.');
-      await loadData();
-    }
-
-    setActionLoading(null);
-  };
-
-  const handleApproveAllLegacy = async () => {
-    const pendingConversations = conversations.filter(canApproveConversation);
-
-    if (pendingConversations.length === 0) {
-      alert('승인 대기 중인 학생이 없습니다.');
-      return;
-    }
-
-    if (!confirm(`${pendingConversations.length}명의 제출을 모두 승인할까요?`)) {
-      return;
-    }
-
-    setActionLoading('all');
-
-    try {
-      const headers = await getAuthHeaders();
-
-      for (const conversation of pendingConversations) {
-        const response = await fetch('/api/approve', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ conversationId: conversation.id }),
-        });
-        const data = await response.json().catch(() => ({ success: false, error: `서버 오류 (HTTP ${response.status})` }));
-
-        if (!response.ok || !data.success) {
-          const errMsg = typeof data.error === 'string'
-            ? data.error
-            : (data.error ? JSON.stringify(data.error) : `${conversation.studentCode}번 승인에 실패했습니다.`);
-          throw new Error(errMsg);
-        }
-      }
-
-      await loadData();
-    } catch (error) {
-      console.error('Approve all error:', error);
-      alert(error instanceof Error ? error.message : '일괄 승인 중 오류가 발생했습니다.');
-      await loadData();
-    }
-
-    setActionLoading(null);
-  };
-
-  const handleApproveAll = async () => {
-    const pendingConversations = conversations.filter(canApproveConversation);
-
-    if (pendingConversations.length === 0) {
-      alert('승인 대기 중인 학생이 없습니다.');
-      return;
-    }
-
-    if (!confirm(`${pendingConversations.length}명의 제출을 모두 승인할까요?`)) {
-      return;
-    }
-
-    setActionLoading('all');
-
-    try {
-      const headers = await getAuthHeaders();
-      const successStudentCodes = [];
-      const failedApprovals = [];
-
-      for (const conversation of pendingConversations) {
-        const response = await fetch('/api/approve', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ conversationId: conversation.id }),
-        });
-        const data = await response.json().catch(() => ({
-          success: false,
-          error: `서버 오류 (HTTP ${response.status})`,
-        }));
-
-        if (response.ok && data.success) {
-          successStudentCodes.push(conversation.studentCode);
-          continue;
-        }
-
-        const errMsg = typeof data.error === 'string'
-          ? data.error
-          : (data.error ? JSON.stringify(data.error) : `${conversation.studentCode}번 승인에 실패했습니다.`);
-        failedApprovals.push({
-          studentCode: conversation.studentCode,
-          message: errMsg,
-        });
-      }
-
-      await loadData();
-
-      if (failedApprovals.length === 0) {
-        alert(`${successStudentCodes.length}명의 제출을 모두 승인했습니다.`);
-      } else {
-        const failedSummary = failedApprovals
-          .map(({ studentCode, message }) => `- ${studentCode}번: ${message}`)
-          .join('\n');
-        const successSummary = successStudentCodes.length > 0
-          ? `승인 완료: ${successStudentCodes.join(', ')}번\n\n`
-          : '';
-        alert(
-          `${successSummary}문제가 있는 번호만 제외하고 나머지는 승인했습니다.\n\n확인 필요:\n${failedSummary}`
-        );
-      }
-    } catch (error) {
-      console.error('Approve all error:', error);
-      alert(error instanceof Error ? error.message : '일괄 승인 중 오류가 발생했습니다.');
-      await loadData();
-    }
-
-    setActionLoading(null);
-  };
-
   const handleDeleteConversation = async (conversation) => {
     if (!canResetConversation(conversation)) {
-      alert('승인 중이거나 이미 승인된 제출은 삭제할 수 없습니다.');
+      alert('Grownd 포인트가 이미 전송된 제출은 삭제할 수 없습니다.');
       return;
     }
 
-    if (!confirm(`${conversation.studentCode}번 학생 제출 기록을 삭제할까요?\n삭제 후 다시 입장하면 새 답변으로 시작합니다.`)) {
-      return;
-    }
+    const label = conversation.studentName || `${conversation.studentCode}번`;
+    if (!confirm(`${label} 학생 제출 기록을 삭제할까요?\n삭제 후 다시 입장하면 새 답변으로 시작합니다.`)) return;
 
     setActionLoading(conversation.id);
-
     try {
       const token = await user.getIdToken();
-      const response = await fetch(`/api/approve?id=${conversation.id}`, {
+      const response = await fetch(`/api/conversations?id=${conversation.id}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await response.json();
 
@@ -393,7 +208,6 @@ export default function AssignmentDetail() {
 
   const formatDate = (value) => {
     if (!value) return '-';
-
     const date = value.toDate ? value.toDate() : new Date(value);
     return date.toLocaleDateString('ko-KR', {
       month: 'short',
@@ -405,40 +219,28 @@ export default function AssignmentDetail() {
 
   const getStatusLabel = (conversation) => {
     if (conversation.approved) {
-      return { text: '승인 완료', className: 'badge-active' };
+      return { text: 'Grownd 전송 완료', className: 'badge-active' };
     }
-
-    if (conversation.approvalStatus === 'processing') {
-      return { text: '승인 처리 중', className: 'badge-inactive' };
-    }
-
     if (conversation.approvalStatus === 'failed') {
-      return { text: '승인 실패', className: 'badge-inactive' };
+      return { text: 'Grownd 실패', className: 'badge-inactive' };
     }
-
     if (conversation.status === 'completed') {
-      return { text: '승인 대기', className: 'badge-inactive' };
+      return { text: '완료', className: 'badge-active' };
     }
-
     return { text: '진행 중', className: 'badge-inactive' };
   };
 
   const avgScore = () => {
-    const scoredConversations = conversations.filter((conversation) => Number.isFinite(conversation.score));
-
-    if (scoredConversations.length === 0) {
-      return '-';
-    }
-
-    const average =
-      scoredConversations.reduce((sum, conversation) => sum + conversation.score, 0) /
-      scoredConversations.length;
-
-    return average.toFixed(1);
+    const scored = conversations.filter((c) => Number.isFinite(c.score));
+    if (scored.length === 0) return '-';
+    const avg = scored.reduce((sum, c) => sum + c.score, 0) / scored.length;
+    return avg.toFixed(1);
   };
 
-  const pendingCount = conversations.filter(canApproveConversation).length;
   const canEditAssignment = !conversations.some(hasStudentStartedConversation);
+  const growndFailedCount = conversations.filter(
+    (c) => c.status === 'completed' && !c.approved && c.approvalStatus === 'failed'
+  ).length;
 
   if (loading) {
     return (
@@ -455,31 +257,17 @@ export default function AssignmentDetail() {
       <div className="page-container">
         <nav className="navbar">
           <Link href="/teacher" className="navbar-brand">
-            <span className="emoji">🦄</span> 메타인지 유니콘
+            <span className="emoji">🤖</span> 오늘배움봇
           </Link>
-          <Link href="/teacher" className="btn btn-ghost btn-sm">
-            대시보드
-          </Link>
+          <Link href="/teacher" className="btn btn-ghost btn-sm">대시보드</Link>
         </nav>
-
         <div className="content-wrapper content-narrow">
           <div className="empty-state">
             <div className="empty-state-emoji">⚠️</div>
             <p className="empty-state-text">{loadError || '과제 정보를 불러오지 못했습니다.'}</p>
-            <div
-              style={{
-                display: 'flex',
-                gap: '0.75rem',
-                justifyContent: 'center',
-                flexWrap: 'wrap',
-              }}
-            >
-              <button className="btn btn-secondary" onClick={loadData}>
-                다시 불러오기
-              </button>
-              <Link href="/teacher" className="btn btn-primary">
-                대시보드로
-              </Link>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" onClick={loadData}>다시 불러오기</button>
+              <Link href="/teacher" className="btn btn-primary">대시보드로</Link>
             </div>
           </div>
         </div>
@@ -491,52 +279,23 @@ export default function AssignmentDetail() {
     <div className="page-container">
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
-          <span className="emoji">🦄</span> 메타인지 유니콘
+          <span className="emoji">🤖</span> 오늘배움봇
         </Link>
-        <Link href="/teacher" className="btn btn-ghost btn-sm">
-          대시보드
-        </Link>
+        <Link href="/teacher" className="btn btn-ghost btn-sm">대시보드</Link>
       </nav>
 
       <div className="content-wrapper">
         {loadError && (
-          <div
-            className="card"
-            style={{
-              marginBottom: '1.5rem',
-              borderColor: 'rgba(251, 113, 133, 0.35)',
-              background: 'rgba(251, 113, 133, 0.08)',
-            }}
-          >
+          <div className="card" style={{ marginBottom: '1.5rem', borderColor: 'rgba(251,113,133,0.35)', background: 'rgba(251,113,133,0.08)' }}>
             <p style={{ marginBottom: '0.75rem' }}>{loadError}</p>
-            <button className="btn btn-secondary btn-sm" onClick={loadData}>
-              다시 불러오기
-            </button>
+            <button className="btn btn-secondary btn-sm" onClick={loadData}>다시 불러오기</button>
           </div>
         )}
 
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: '2rem',
-            flexWrap: 'wrap',
-            gap: '1rem',
-          }}
-        >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-                marginBottom: '0.5rem',
-              }}
-            >
-              <h1 className="heading-section" style={{ marginBottom: 0 }}>
-                {assignment.title}
-              </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <h1 className="heading-section" style={{ marginBottom: 0 }}>{assignment.title}</h1>
               <span className={`badge ${assignment.isActive ? 'badge-active' : 'badge-inactive'}`}>
                 {assignment.isActive ? '활성' : '비활성'}
               </span>
@@ -545,11 +304,16 @@ export default function AssignmentDetail() {
               {assignment.subject ? `${assignment.subject} · ` : ''}
               {assignment.grade ? `${assignment.grade} · ` : ''}
               입장코드: <strong style={{ color: 'var(--cyan-primary)', letterSpacing: '0.1em' }}>{assignment.entryCode}</strong>
+            <button
+              onClick={() => copyEntryCode(assignment.entryCode)}
+              className="btn btn-ghost btn-sm"
+              style={{ marginLeft: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}
+            >
+              {codeCopied ? '✓ 복사됨' : '📋 복사'}
+            </button>
             </p>
             {scoreScaleLabel && (
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>
-                점수 단계: {scoreScaleLabel}
-              </p>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.35rem' }}>점수 단계: {scoreScaleLabel}</p>
             )}
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem' }}>
               채점 성향: {getScoringStyleLabel(assignment.scoringStyle)}
@@ -560,52 +324,25 @@ export default function AssignmentDetail() {
                   대화 턴: 최소 {chatConstraints.minTurns}턴 후 채점 가능 · 최대 {chatConstraints.maxTurns}턴
                 </p>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem' }}>
-                  학생 답변 길이: {formatStudentMessageByteRange(
-                    chatConstraints.minStudentMessageBytes,
-                    chatConstraints.maxStudentMessageBytes
-                  )}
+                  학생 답변 길이: {formatStudentMessageByteRange(chatConstraints.minStudentMessageBytes, chatConstraints.maxStudentMessageBytes)}
                 </p>
               </>
             )}
           </div>
 
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {pendingCount > 0 && (
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={handleApproveAll}
-                disabled={actionLoading === 'all'}
-              >
-                {actionLoading === 'all' ? '처리 중...' : `전체 승인 (${pendingCount})`}
-              </button>
-            )}
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={handleDuplicateAssignment}
-              disabled={actionLoading === 'duplicate-assignment'}
-            >
+            <button className="btn btn-secondary btn-sm" onClick={handleDuplicateAssignment} disabled={actionLoading === 'duplicate-assignment'}>
               {actionLoading === 'duplicate-assignment' ? '복사 중...' : '과제 복사'}
             </button>
             {canEditAssignment ? (
-              <Link href={`/teacher/assignments/edit?id=${assignment.id}`} className="btn btn-secondary btn-sm">
-                과제 수정
-              </Link>
+              <Link href={`/teacher/assignments/edit?id=${assignment.id}`} className="btn btn-secondary btn-sm">과제 수정</Link>
             ) : (
-              <button className="btn btn-secondary btn-sm" disabled title="학생이 시작한 뒤에는 수정할 수 없습니다.">
-                수정 불가
-              </button>
+              <button className="btn btn-secondary btn-sm" disabled title="학생이 시작한 뒤에는 수정할 수 없습니다.">수정 불가</button>
             )}
-            <button
-              className={`btn ${assignment.isActive ? 'btn-danger' : 'btn-secondary'} btn-sm`}
-              onClick={handleToggle}
-            >
+            <button className={`btn ${assignment.isActive ? 'btn-danger' : 'btn-secondary'} btn-sm`} onClick={handleToggle}>
               {assignment.isActive ? '비활성화' : '활성화'}
             </button>
-            <button
-              className="btn btn-danger btn-sm"
-              onClick={handleDeleteAssignment}
-              disabled={actionLoading === 'delete-assignment'}
-            >
+            <button className="btn btn-danger btn-sm" onClick={handleDeleteAssignment} disabled={actionLoading === 'delete-assignment'}>
               {actionLoading === 'delete-assignment' ? '삭제 중...' : '과제 삭제'}
             </button>
           </div>
@@ -617,25 +354,18 @@ export default function AssignmentDetail() {
             <div className="stat-label">전체 참여</div>
           </div>
           <div className="stat-card">
-            <div className="stat-value">
-              {conversations.filter((conversation) => conversation.status === 'completed').length}
-            </div>
+            <div className="stat-value">{conversations.filter((c) => c.status === 'completed').length}</div>
             <div className="stat-label">완료</div>
           </div>
           <div className="stat-card">
-            <div
-              className="stat-value"
-              style={{ color: pendingCount > 0 ? 'var(--yellow-primary)' : undefined }}
-            >
-              {pendingCount}
-            </div>
-            <div className="stat-label">승인 대기</div>
+            <div className="stat-value">{conversations.filter((c) => c.approved).length}</div>
+            <div className="stat-label">Grownd 전송</div>
           </div>
           <div className="stat-card">
-            <div className="stat-value">
-              {conversations.filter((conversation) => conversation.approved).length}
+            <div className="stat-value" style={{ color: growndFailedCount > 0 ? 'var(--yellow-primary)' : undefined }}>
+              {growndFailedCount}
             </div>
-            <div className="stat-label">승인 완료</div>
+            <div className="stat-label">전송 실패</div>
           </div>
           <div className="stat-card">
             <div className="stat-value">{avgScore()}</div>
@@ -643,32 +373,17 @@ export default function AssignmentDetail() {
           </div>
         </div>
 
-        {/* 기간별 데이터 다운로드 */}
         {conversations.length > 0 && (
           <div className="card-glass" style={{ marginBottom: '2rem' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
-              📂 데이터 다운로드
-            </h3>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>📂 데이터 다운로드</h3>
             <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: '1rem' }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" style={{ fontSize: '0.85rem' }}>시작일</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  style={{ maxWidth: '180px' }}
-                />
+                <input type="date" className="form-input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ maxWidth: '180px' }} />
               </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" style={{ fontSize: '0.85rem' }}>종료일</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  style={{ maxWidth: '180px' }}
-                />
+                <input type="date" className="form-input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ maxWidth: '180px' }} />
               </div>
               <button
                 className="btn btn-secondary btn-sm"
@@ -699,13 +414,7 @@ export default function AssignmentDetail() {
                     return str;
                   };
 
-                  const isArt = assignment.type === 'art';
-                  const headers = [
-                    '학생번호', '상태', '점수',
-                    ...(isArt ? ['도달단계'] : []),
-                    '피드백', '다음단계팁',
-                    '시작시간', '완료시간', '대화내용',
-                  ];
+                  const headers = ['이름', '번호', '상태', '점수', '피드백', '다음단계팁', '시작시간', '완료시간', '대화내용'];
 
                   const rows = filtered.map((conv) => {
                     const startedAt = conv.startedAt
@@ -716,14 +425,14 @@ export default function AssignmentDetail() {
                       : null;
 
                     const chatLog = (conv.messages || [])
-                      .map((m) => `[${m.role === 'unicorn' ? '유니콘' : '학생'}] ${m.content}`)
+                      .map((m) => `[${(m.role === 'bot' || m.role === 'unicorn') ? '봇' : '학생'}] ${m.content}`)
                       .join('\n');
 
                     return [
-                      conv.studentCode,
+                      conv.studentName || '',
+                      conv.studentCode || '',
                       conv.status === 'completed' ? '완료' : '진행중',
                       conv.score ?? '',
-                      ...(isArt ? [conv.reachedStage ?? ''] : []),
                       conv.feedback ?? '',
                       conv.nextStepTip || conv.higherScoreTip || '',
                       startedAt ? startedAt.toLocaleString('ko-KR') : '',
@@ -732,7 +441,7 @@ export default function AssignmentDetail() {
                     ].map(escapeCSV).join(',');
                   });
 
-                  const bom = '\uFEFF';
+                  const bom = '﻿';
                   const csvContent = bom + headers.join(',') + '\n' + rows.join('\n');
                   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
                   const url = URL.createObjectURL(blob);
@@ -745,9 +454,7 @@ export default function AssignmentDetail() {
                 }}
               >
                 📅 CSV 다운로드 {dateFrom || dateTo ? `(${conversations.filter((conv) => {
-                  const startedAt = conv.startedAt
-                    ? (conv.startedAt.toDate ? conv.startedAt.toDate() : new Date(conv.startedAt))
-                    : null;
+                  const startedAt = conv.startedAt ? (conv.startedAt.toDate ? conv.startedAt.toDate() : new Date(conv.startedAt)) : null;
                   if (!startedAt) return !dateFrom && !dateTo;
                   if (dateFrom && startedAt < new Date(dateFrom)) return false;
                   if (dateTo && startedAt > new Date(dateTo + 'T23:59:59')) return false;
@@ -755,9 +462,7 @@ export default function AssignmentDetail() {
                 }).length}건)` : `(전체 ${conversations.length}건)`}
               </button>
             </div>
-            <p className="form-hint">
-              비워두면 전체 기간을 다운로드합니다. 학생별 대화 내용, 점수, 피드백이 모두 포함됩니다.
-            </p>
+            <p className="form-hint">비워두면 전체 기간을 다운로드합니다. 학생별 대화 내용, 점수, 피드백이 모두 포함됩니다.</p>
           </div>
         )}
 
@@ -765,10 +470,10 @@ export default function AssignmentDetail() {
 
         {conversations.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-emoji">🦄</div>
+            <div className="empty-state-emoji">📋</div>
             <p className="empty-state-text">아직 참여한 학생이 없습니다.</p>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-              학생에게 입장코드 <strong style={{ color: 'var(--cyan-primary)' }}>{assignment.entryCode}</strong>를 알려 주세요.
+              학생에게 입장코드 <strong style={{ color: 'var(--cyan-primary)' }}>{assignment.entryCode}</strong>와 이름·비밀번호를 알려 주세요.
             </p>
           </div>
         ) : (
@@ -777,10 +482,9 @@ export default function AssignmentDetail() {
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>번호</th>
+                    <th>학생</th>
                     <th>상태</th>
                     <th>점수</th>
-                    {assignment.type === 'art' && <th>감상 배지</th>}
                     <th>시작 시간</th>
                     <th>관리</th>
                   </tr>
@@ -789,39 +493,20 @@ export default function AssignmentDetail() {
                   {conversations.map((conversation) => {
                     const status = getStatusLabel(conversation);
                     const isSelected = selectedConv?.id === conversation.id;
+                    const displayName = conversation.studentName || `${conversation.studentCode}번`;
 
                     return (
                       <tr key={conversation.id}>
                         <td>
-                          <strong>{conversation.studentCode}번</strong>
+                          <strong>{displayName}</strong>
                         </td>
                         <td>
                           <span className={`badge ${status.className}`}>{status.text}</span>
                         </td>
                         <td>{formatConversationScore(conversation.score)}</td>
-                        {assignment.type === 'art' && (
-                          <td>
-                            {conversation.reachedStage ? (
-                              <span style={{ fontSize: '0.85rem' }}>
-                                {formatReachedStage(conversation.reachedStage)?.map((b) => (
-                                  <span key={b.stage} title={b.label} style={{ marginRight: '0.2rem' }}>{b.emoji}</span>
-                                ))}
-                              </span>
-                            ) : '-'}
-                          </td>
-                        )}
                         <td className="card-meta">{formatDate(conversation.startedAt)}</td>
                         <td>
                           <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                            {canApproveConversation(conversation) && (
-                              <button
-                                className="btn btn-primary btn-sm"
-                                onClick={() => handleApprove(conversation)}
-                                disabled={actionLoading === conversation.id}
-                              >
-                                {actionLoading === conversation.id ? '...' : '승인'}
-                              </button>
-                            )}
                             <button
                               className="btn btn-ghost btn-sm"
                               onClick={() => setSelectedConv(isSelected ? null : conversation)}
@@ -833,9 +518,9 @@ export default function AssignmentDetail() {
                                 className="btn btn-danger btn-sm"
                                 onClick={() => handleDeleteConversation(conversation)}
                                 disabled={actionLoading === conversation.id}
-                                title="삭제"
+                                title="삭제 (재참여 가능)"
                               >
-                                삭제
+                                {actionLoading === conversation.id ? '...' : '삭제'}
                               </button>
                             )}
                           </div>
@@ -850,27 +535,19 @@ export default function AssignmentDetail() {
             {selectedConv && (
               <div className="card-glass" style={{ marginBottom: '2rem' }}>
                 <h3 style={{ marginBottom: '1rem', fontSize: '1rem' }}>
-                  {selectedConv.studentCode}번 학생 대화 기록
+                  {selectedConv.studentName || `${selectedConv.studentCode}번`} 대화 기록
                   {Number.isFinite(selectedConv.score) && (
-                    <span className="badge badge-score" style={{ marginLeft: '0.75rem' }}>
-                      {selectedConv.score}점
-                    </span>
+                    <span className="badge badge-score" style={{ marginLeft: '0.75rem' }}>{selectedConv.score}점</span>
                   )}
                   {selectedConv.approved && (
-                    <span className="badge badge-active" style={{ marginLeft: '0.5rem' }}>
-                      승인 완료
-                    </span>
+                    <span className="badge badge-active" style={{ marginLeft: '0.5rem' }}>Grownd 전송 완료</span>
                   )}
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   {(selectedConv.messages || []).map((message, index) => (
-                    <div
-                      key={index}
-                      className={`chat-bubble chat-bubble-${message.role}`}
-                      style={{ maxWidth: '85%' }}
-                    >
-                      {message.role === 'unicorn' && <div className="chat-sender">{assignment.type === 'art' ? '미술 유니콘' : '메타인지 유니콘'}</div>}
+                    <div key={index} className={`chat-bubble chat-bubble-${message.role}`} style={{ maxWidth: '85%' }}>
+                      {(message.role === 'bot' || message.role === 'unicorn') && <div className="chat-sender">오늘배움봇</div>}
                       <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
                     </div>
                   ))}
@@ -884,18 +561,13 @@ export default function AssignmentDetail() {
 
                 {(selectedConv.nextStepTip || selectedConv.higherScoreTip) && (
                   <div className="score-feedback" style={{ marginTop: '0.75rem' }}>
-                    <strong>💡 다음 감상 팁</strong> {selectedConv.nextStepTip || selectedConv.higherScoreTip}
+                    <strong>💡 다음에 해볼 것</strong> {selectedConv.nextStepTip || selectedConv.higherScoreTip}
                   </div>
                 )}
 
                 {selectedConv.lastGrowndError?.message && !selectedConv.approved && (
                   <div className="score-feedback" style={{ marginTop: '1rem' }}>
-                    <strong>승인 오류</strong> {selectedConv.lastGrowndError.message}
-                    {selectedConv.approvalStatus === 'processing' && (
-                      <div style={{ marginTop: '0.5rem' }}>
-                        중복 지급을 막기 위해 자동 재시도는 잠시 막혀 있습니다. 상태를 확인한 뒤 필요하면 관리자 확인 후 처리해 주세요.
-                      </div>
-                    )}
+                    <strong>Grownd 전송 실패</strong> {selectedConv.lastGrowndError.message}
                   </div>
                 )}
               </div>

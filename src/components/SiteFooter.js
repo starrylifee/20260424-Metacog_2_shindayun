@@ -5,7 +5,7 @@ export default function SiteFooter() {
     <footer className="site-footer">
       <div className="site-footer-inner">
         <p className="site-footer-copy">
-          메타인지 유니콘은 앱뜰(App-Tteul) 플랫폼의 하위 프로그램입니다.
+          오늘배움봇은 앱뜰(App-Tteul) 플랫폼의 하위 프로그램입니다.
         </p>
         <div className="site-footer-links">
           <Link href="/privacy">개인정보 처리방침</Link>

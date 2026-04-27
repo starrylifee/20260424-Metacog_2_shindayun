@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
 
-import { getArtPromptPaintingInfoLines } from '@/lib/artAssignment';
 import { CHAT_SESSION_COOKIE, hashChatSessionToken } from '@/lib/chatSession';
 import { getUtf8ByteLength, normalizeAssignmentConstraints } from '@/lib/chatConstraints';
 import {
@@ -13,11 +12,20 @@ import {
   getScoringStyleLabel,
   normalizeScoringStyle,
 } from '@/lib/scoreConfig';
+import {
+  GROWND_BASE_URL,
+  extractGrowndErrorDetail,
+  parseGrowndResponse,
+} from '@/lib/grownd';
 import { FieldValue, adminDb } from '@/lib/serverDb';
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai = null;
+function getOpenAI() {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return _openai;
+}
 
 const MODEL_NAME = 'gpt-4o-mini';
 
@@ -59,7 +67,7 @@ function buildSystemPrompt(assignment, options = {}) {
   const scoringStyle = normalizeScoringStyle(assignment.scoringStyle);
   const lowestScore = getLowestAllowedScore(scoreOptions);
 
-  return `너는 "메타인지 유니콘"이라는 이름의 친근한 학습 도우미야.
+  return `너는 "오늘배움봇"이라는 이름의 친근한 학습 도우미야.
 학생이 오늘 배운 내용을 자기 말로 설명하면, 짧게 되묻고 마지막에는 점수와 피드백을 알려 줘.
 
 === 학습 주제 ===
@@ -106,95 +114,6 @@ ${buildScoringStyleGuidance(scoreOptions, scoringStyle)}
 - ${shouldForceFinish ? '이번 응답은 마지막 응답이야. 질문하지 말고 바로 마무리해.' : allowFinish ? '학생이 충분히 설명했거나 턴이 거의 다 찼다면 더 캐묻지 말고 종료해.' : `아직 학생 답변이 충분히 쌓이지 않았어. [SCORE], [FEEDBACK], [HIGHER_SCORE_TIP] 태그를 절대 사용하지 말고, 핵심이 부족한 부분을 한두 가지만 짧게 더 물어봐.`}`;
 }
 
-function buildArtSystemPrompt(assignment, options = {}) {
-  const { shouldForceFinish = false, allowFinish = true, maxTurns = 5 } = options;
-  const scoreOptions = getAssignmentScoreOptions(assignment);
-  const maxScore = getAssignmentMaxScore(assignment);
-  const lowestScore = getLowestAllowedScore(scoreOptions);
-
-  const paintingInfo = getArtPromptPaintingInfoLines(assignment).join('\n') || '?묓뭹 ?뺣낫媛 誘몃━ 怨듦컻?섏? ?딆븯?듬땲??';
-
-  const paintingKnowledge = assignment.paintingContext
-    ? `\n=== 이 작품에 대한 배경 지식 (학생에게 직접 알려주지 말고, 대화를 이끌 때 참고만 해) ===\n${assignment.paintingContext}`
-    : '';
-
-  return `너는 "미술 유니콘"이라는 이름의 다정하고 호기심 많은 미술 감상 친구야.
-이건 시험이 아니야. 학생이 그림을 보고 자유롭게 이야기하면서 즐기는 시간이야.
-맞장구를 치며 자연스럽게 더 깊이 생각하도록 이끌어 줘.
-"정답"은 없어. 학생 자신만의 느낌과 생각이 가장 소중해.
-너는 이 명화에 대해 잘 알고 있지만, 학생에게 지식을 가르치는 게 아니라 함께 즐기며 스스로 발견하게 도와주는 역할이야.
-
-=== 감상할 작품 ===
-${paintingInfo}${paintingKnowledge}
-
-=== 이번 감상 목표 ===
-${assignment.appreciationPrompt || '네 단계를 자연스럽게 안내해.'}
-
-=== 감상 흐름 (자연스럽게 안내하되, 단계 이름을 학생에게 굳이 알려주지 않아도 돼) ===
-1단계: 무엇이 보이는지 찾아보기
-  → "이 그림에서 뭐가 제일 먼저 눈에 들어와?", "어떤 색이 많이 보여?" 같은 질문.
-  → 색깔, 사람, 동물, 물건, 배경 등 보이는 걸 자유롭게 말하게 해.
-  → 학생이 뭘 하나라도 말하면 "오, 잘 봤다!" 하고 맞장구.
-
-2단계: 어떻게 그렸는지 살펴보기
-  → "이 부분은 왜 이렇게 밝은(어두운) 것 같아?", "선이 어떤 느낌이야?" 같은 질문.
-  → 색 사용, 밝기, 붓 터치, 구도(화면 배치) 등을 탐색하게 해.
-  → 어려운 용어 대신 "밝다/어둡다, 부드럽다/거칠다, 가운데/가장자리" 같은 쉬운 말 사용.
-
-3단계: 작가의 마음 상상해보기
-  → "이 그림을 그릴 때 작가 기분이 어땠을 것 같아?", "이 그림이 무슨 이야기를 하고 있는 것 같아?" 같은 질문.
-  → 학생의 상상이 엉뚱해도 OK! "재밌는 생각이다!" 하고 이유를 물어봐.
-
-4단계: 나만의 생각 말하기
-  → "이 그림에서 제일 마음에 드는 부분은? 왜?", "이 그림 제목을 네가 다시 지어본다면?" 같은 질문.
-  → 학생이 "좋다/싫다"만 말하면 "어떤 점이?" 하고 이유를 부드럽게 물어봐.
-
-=== 대화 원칙 ===
-- 한 번에 질문은 딱 1개만. 여러 개 동시에 던지지 마.
-- 서두르지 마. 학생이 한 단계에서 충분히 이야기하고 싶어 하면 거기서 더 머물러도 돼.
-- 학생이 막히면: "힌트를 줄까?" 하고, 더 쉬운 질문으로 내려가.
-- 학생이 잘 답하면: 그 말을 인정("오! 그렇구나~")한 뒤 자연스럽게 다음 흐름으로.
-- "틀렸어"는 절대 금지. "그렇게 볼 수도 있겠다! 그러면 이건 어때?" 식으로.
-- "네가 말한 것처럼~"으로 학생 답변을 반영하면 학생이 자신감을 가져.
-- 학생이 한 말에 대해 이 작품과 관련된 배경 지식으로 맞장구를 칠 수 있어. 단, 지식을 일방적으로 전달하지 마.
-- 대화가 즐거운 수다처럼 흘러가게 해. 학생이 "더 하고 싶다"고 느끼면 성공이야.
-
-=== 질문 난이도: ${assignment.difficultyLabel || '중급'} ===
-${assignment.difficultyPrompt || '쉬운 말로 질문하되 스스로 생각하도록 유도해.'}
-
-=== 채점 기준: 감상의 깊이 ===
-- 사용할 수 있는 점수는 ${formatScoreOptions(scoreOptions)}점뿐이야.
-- **정확한 미술 지식이 아니라 "감상이 얼마나 깊었느냐"로 점수를 줘.**
-- 감상의 깊이란:
-  · 작품을 구체적으로 관찰했는가 (예: 색깔, 형태, 인물 등을 구체적으로 언급)
-  · 표현 방법을 인식했는가 (예: 밝고 어두운 부분, 선의 느낌 등)
-  · 자기 나름의 의미를 찾으려 했는가 (예: 작가의 마음, 그림의 이야기)
-  · 자신의 생각을 근거와 함께 표현했는가 (예: "~해서 ~같아")
-- 점수와 도달 단계를 연동해:
-  · 1단계(관찰)까지만 도달: 낮은 점수 범위
-  · 2단계(분석)까지 도달: 중하 점수 범위
-  · 3단계(해석)까지 도달: 중상 점수 범위
-  · 4단계(판단)까지 도달 + 깊이 있는 감상: 최고점 ${maxScore}점
-- 같은 단계라도 더 구체적이고 자기만의 표현이 있으면 높은 점수를 줘.
-- 틀린 해석이라도 진지하게 자기 생각을 말했으면 그 깊이를 인정해.
-- 최저 ${lowestScore}점: 장난, 엉뚱한 답, 무관한 말, "몰라" 반복.
-
-=== 마무리 형식 ===
-대화를 마무리할 때는 학생이 오늘 감상에서 발견한 것들을 따뜻하게 요약해 줘.
-마지막 줄들에 아래 태그를 정확히 넣어.
-
-[SCORE:X]
-[REACHED_STAGE:도달한 가장 높은 단계 번호(1~4)]
-[FEEDBACK:X점을 준 이유를 구체적으로. 예: "3단계까지 도달했고 색과 형태를 구체적으로 관찰했지만, 자기만의 판단을 근거와 함께 표현하는 부분이 아쉬워서 4점이야." 최고점이면 왜 최고점인지 설명]
-[NEXT_STEP_TIP:다음에 그림을 볼 때 스스로 해볼 수 있는 질문이나 시도를 구체적으로 제안. 최고점이면 '정말 깊이 있는 감상이었어!']
-
-=== 중요 ===
-- 학생 발화 기회는 최대 ${maxTurns}번이야.
-- ${maxTurns}번째 답변 뒤에는 반드시 마무리해야 해.
-- 학생이 "몰라요"처럼 짧게 답해도 지금까지 한 말을 바탕으로 평가하고 마무리해.
-- ${shouldForceFinish ? '이번은 마지막 응답이야. 질문하지 말고 바로 마무리해.' : allowFinish ? '학생이 충분히 감상했거나 턴이 거의 다 찼다면 자연스럽게 마무리해.' : '[SCORE], [REACHED_STAGE], [FEEDBACK], [NEXT_STEP_TIP] 태그를 절대 사용하지 말고, 대화를 자연스럽게 이어가.'}`;
-}
-
 function extractTaggedValue(text, tagName) {
   const pattern = new RegExp(`\\[${tagName}:(.*?)\\]`, 's');
   const match = text.match(pattern);
@@ -204,7 +123,6 @@ function extractTaggedValue(text, tagName) {
 function stripCompletionTags(text) {
   return text
     .replace(/\[SCORE:.*?\]/s, '')
-    .replace(/\[REACHED_STAGE:.*?\]/s, '')
     .replace(/\[FEEDBACK:.*?\]/s, '')
     .replace(/\[HIGHER_SCORE_TIP:.*?\]/s, '')
     .replace(/\[NEXT_STEP_TIP:.*?\]/s, '')
@@ -229,13 +147,9 @@ function extractCompletionData(content, assignment) {
   const parsedScore = Number.parseInt(scoreMatch[1], 10);
   const score = getClosestAllowedScore(scoreOptions, parsedScore) ?? getLowestAllowedScore(scoreOptions);
 
-  const reachedStageRaw = extractTaggedValue(replyText, 'REACHED_STAGE');
-  const reachedStage = reachedStageRaw ? Number.parseInt(reachedStageRaw, 10) || null : null;
-
   return {
     finished: true,
     score,
-    reachedStage,
     feedback: extractTaggedValue(replyText, 'FEEDBACK'),
     higherScoreTip: extractTaggedValue(replyText, 'HIGHER_SCORE_TIP'),
     nextStepTip: extractTaggedValue(replyText, 'NEXT_STEP_TIP'),
@@ -269,7 +183,7 @@ function parseJsonResponse(content) {
     try {
       return JSON.parse(candidate);
     } catch (_) {
-      // Keep trying the next candidate.
+      // keep trying
     }
   }
 
@@ -279,7 +193,7 @@ function parseJsonResponse(content) {
 function buildConversationTranscript(conversationMessages) {
   return conversationMessages
     .map((message, index) => {
-      const speaker = message.role === 'user' ? '학생' : '유니콘';
+      const speaker = message.role === 'user' ? '학생' : '봇';
       return `${index + 1}. ${speaker}: ${String(message.content ?? '').trim()}`;
     })
     .join('\n');
@@ -299,31 +213,18 @@ function normalizeStructuredFinalReply(payload, assignment) {
     return null;
   }
 
-  const result = {
+  return {
     finished: true,
     score,
     feedback,
     reply,
-    higherScoreTip: '',
+    higherScoreTip: typeof payload.higherScoreTip === 'string' ? payload.higherScoreTip.trim() : '',
     nextStepTip: '',
-    reachedStage: null,
   };
-
-  if (assignment.type === 'art') {
-    const reachedStage = Number.parseInt(payload.reachedStage, 10);
-    result.reachedStage = reachedStage >= 1 && reachedStage <= 4 ? reachedStage : null;
-    result.nextStepTip =
-      typeof payload.nextStepTip === 'string' ? payload.nextStepTip.trim() : '';
-  } else {
-    result.higherScoreTip =
-      typeof payload.higherScoreTip === 'string' ? payload.higherScoreTip.trim() : '';
-  }
-
-  return result;
 }
 
 async function createChatReply(messages, options = {}) {
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: MODEL_NAME,
     messages,
     temperature: options.temperature ?? 0.7,
@@ -337,36 +238,6 @@ async function createChatReply(messages, options = {}) {
 function buildForcedFinalEvaluationPrompt(assignment) {
   const scoreOptions = getAssignmentScoreOptions(assignment);
   const maxScore = getAssignmentMaxScore(assignment);
-
-  if (assignment.type === 'art') {
-    const paintingInfo =
-      getArtPromptPaintingInfoLines(assignment)
-        .map((line) => `- ${line}`)
-        .join('\n') || '- 작품 정보 비공개';
-
-    return `너는 미술 감상 대화의 최종 채점기다.
-반드시 JSON 객체만 출력하고, 마크다운이나 코드블록은 쓰지 마.
-
-채점 기준:
-- 허용 점수는 ${formatScoreOptions(scoreOptions)}점뿐이다.
-- 정확한 미술 지식보다 감상의 깊이를 본다.
-- 학생이 작품을 구체적으로 관찰했는지, 표현 방법을 분석했는지, 작가의 감정이나 이야기를 해석했는지, 자신의 판단과 근거를 말했는지를 함께 본다.
-- reachedStage는 가장 높게 도달한 감상 단계다.
-  1: 보이는 것 관찰
-  2: 표현 방법이나 색, 구도 분석
-  3: 작가 감정, 분위기, 이야기 해석
-  4: 자기 판단과 근거까지 표현
-- reply는 학생에게 보내는 2~4문장 마무리 말이다. 질문형으로 끝내지 마.
-- feedback는 왜 그 점수를 주었는지 1~2문장으로 구체적으로 설명한다.
-- nextStepTip는 다음 그림 감상에서 바로 시도할 수 있는 한 가지를 제안한다.
-- 최고 점수는 ${maxScore}점이다.
-
-작품 정보:
-${paintingInfo}
-
-반드시 아래 형태의 JSON만 출력해.
-{"reply":"string","score":0,"reachedStage":1,"feedback":"string","nextStepTip":"string"}`;
-  }
 
   return `너는 학습 대화의 최종 채점기다.
 반드시 JSON 객체만 출력하고, 마크다운이나 코드블록은 쓰지 마.
@@ -384,31 +255,26 @@ ${paintingInfo}
 }
 
 async function createForcedFinalReply(assignment, conversationMessages) {
-  const isArt = assignment.type === 'art';
-  const buildPrompt = isArt ? buildArtSystemPrompt : buildSystemPrompt;
   const { maxTurns } = normalizeAssignmentConstraints(assignment);
-  const reachedStageTag = isArt ? '\n[REACHED_STAGE:도달한 가장 높은 단계 번호(1~4)]' : '';
-  const tipTag = isArt ? 'NEXT_STEP_TIP' : 'HIGHER_SCORE_TIP';
-  const tipDesc = isArt ? '다음에 그림을 볼 때 스스로 해볼 수 있는 질문이나 시도' : '더 높은 다음 점수를 받으려면 어떤 말을 더 했어야 하는지';
 
   const attempts = [
     {
       temperature: 0.3,
       maxTokens: 420,
-      systemPrompt: buildPrompt(assignment, { shouldForceFinish: true, maxTurns }),
+      systemPrompt: buildSystemPrompt(assignment, { shouldForceFinish: true, maxTurns }),
     },
     {
       temperature: 0,
       maxTokens: 420,
-      systemPrompt: `${buildPrompt(assignment, { shouldForceFinish: true, maxTurns })}
+      systemPrompt: `${buildSystemPrompt(assignment, { shouldForceFinish: true, maxTurns })}
 
 === 출력 형식 재강조 ===
 - 이번 응답은 마지막 응답이야.
 - 추가 질문은 하지 마.
 - 2~4문장으로 짧게 마무리한 뒤 아래 태그를 반드시 포함해.
-[SCORE:X]${reachedStageTag}
+[SCORE:X]
 [FEEDBACK:현재 점수를 준 이유]
-[${tipTag}:${tipDesc}]`,
+[HIGHER_SCORE_TIP:더 높은 점수를 받으려면 무엇을 더 말했어야 하는지]`,
     },
   ];
 
@@ -461,41 +327,81 @@ async function createStructuredForcedFinalReply(assignment, conversationMessages
 }
 
 function buildFallbackCompletion(assignment, partialReply = '') {
-  const isArt = assignment.type === 'art';
   const scoreOptions = getAssignmentScoreOptions(assignment);
   const fallbackScore = getLowestAllowedScore(scoreOptions);
   const nextHigherScore = getNextHigherScore(scoreOptions, fallbackScore);
-  const fallbackTip = isArt
-    ? '다음에는 그림에서 가장 먼저 눈에 띈 부분 하나를 고르고, 왜 그렇게 느꼈는지 색이나 모양, 분위기를 붙여서 말해 보면 더 깊은 감상이 돼.'
-    : nextHigherScore === null
-      ? '이미 최고 점수야.'
-      : `${nextHigherScore}점을 받으려면 장난이나 짧은 답으로 끝내지 말고, 오늘 배운 핵심이 무엇인지와 왜 그런지 또는 어떤 예시가 있는지 함께 설명해 줘.`;
+  const fallbackTip = nextHigherScore === null
+    ? '이미 최고 점수야.'
+    : `${nextHigherScore}점을 받으려면 장난이나 짧은 답으로 끝내지 말고, 오늘 배운 핵심이 무엇인지와 왜 그런지 또는 어떤 예시가 있는지 함께 설명해 줘.`;
 
   return {
     finished: true,
     score: fallbackScore,
     feedback: '오늘 수업과 연결된 핵심 설명이 충분히 드러나지 않아 낮은 점수로 마무리했어.',
-    higherScoreTip: isArt ? '' : fallbackTip,
-    nextStepTip: isArt ? fallbackTip : '',
-    reachedStage: null,
+    higherScoreTip: fallbackTip,
+    nextStepTip: '',
     reply: partialReply || '여기까지 설명한 내용을 바탕으로 이번 대화는 마무리할게.',
   };
 }
 
+async function sendGrowndPoints(assignment, conversation, score) {
+  if (!score || score <= 0) return;
+
+  try {
+    const teacherSnap = await adminDb.collection('teachers').doc(assignment.teacherId).get();
+    if (!teacherSnap.exists) return;
+
+    const { growndApiKey, growndClassId } = teacherSnap.data() || {};
+    if (!growndApiKey || !growndClassId || !conversation.studentCode) return;
+
+    const growndAbort = new AbortController();
+    const timeout = setTimeout(() => growndAbort.abort(), 6000);
+
+    let growndResponse;
+    try {
+      growndResponse = await fetch(
+        `${GROWND_BASE_URL}/api/v1/classes/${growndClassId}/students/${conversation.studentCode}/points`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': growndApiKey,
+          },
+          body: JSON.stringify({
+            type: 'reward',
+            points: score,
+            description: `오늘배움봇 과제 완료 (${score}점)`,
+            source: 'OneumBaeumBot',
+          }),
+          signal: growndAbort.signal,
+        }
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const growndResult = await parseGrowndResponse(growndResponse);
+
+    if (growndResponse.ok) {
+      return { success: true };
+    } else {
+      const errMsg = extractGrowndErrorDetail(growndResponse, growndResult);
+      console.error('[Grownd] auto-send failed:', errMsg);
+      return { success: false, error: errMsg };
+    }
+  } catch (err) {
+    console.error('[Grownd] auto-send error:', err?.message || err);
+    return { success: false, error: err?.message };
+  }
+}
+
 export async function POST(request) {
   try {
-    const { conversationId, assignmentId, content, studentCode } = await request.json();
-    const normalizedStudentCode = Number(studentCode);
+    const { conversationId, assignmentId, content } = await request.json();
     const userMessage = typeof content === 'string' ? content.trim() : '';
     const sessionToken = request.cookies.get(CHAT_SESSION_COOKIE)?.value;
 
-    if (
-      !conversationId ||
-      !assignmentId ||
-      !userMessage ||
-      !Number.isInteger(normalizedStudentCode) ||
-      !sessionToken
-    ) {
+    if (!conversationId || !assignmentId || !userMessage || !sessionToken) {
       return NextResponse.json(
         { success: false, error: '세션이 유효하지 않습니다. 처음부터 다시 시작해 주세요.' },
         { status: 400 }
@@ -520,11 +426,7 @@ export async function POST(request) {
     const assignment = assignmentSnap.data();
     const conversation = conversationSnap.data();
 
-    if (
-      conversation.assignmentId !== assignmentId ||
-      conversation.studentCode !== normalizedStudentCode ||
-      conversation.status === 'completed'
-    ) {
+    if (conversation.assignmentId !== assignmentId || conversation.status === 'completed') {
       return NextResponse.json(
         { success: false, error: '이 대화는 더 이상 진행할 수 없습니다.' },
         { status: 409 }
@@ -544,7 +446,6 @@ export async function POST(request) {
     const existingMessages = Array.isArray(conversation.messages) ? conversation.messages : [];
     const studentTurnCount =
       existingMessages.filter((message) => message.role === 'student').length + 1;
-    const isArt = assignment.type === 'art';
     const chatConstraints = normalizeAssignmentConstraints(assignment);
     const effectiveMaxTurns = chatConstraints.maxTurns;
     const minTurns = chatConstraints.minTurns;
@@ -587,22 +488,20 @@ export async function POST(request) {
       { role: 'user', content: userMessage },
     ];
 
-    const systemPrompt = assignment.type === 'art'
-      ? buildArtSystemPrompt(assignment, { shouldForceFinish, allowFinish, maxTurns: effectiveMaxTurns })
-      : buildSystemPrompt(assignment, { shouldForceFinish, allowFinish, maxTurns: effectiveMaxTurns });
+    const systemPrompt = buildSystemPrompt(assignment, {
+      shouldForceFinish,
+      allowFinish,
+      maxTurns: effectiveMaxTurns,
+    });
 
     let parsedReply = extractCompletionData(
       await createChatReply(
-        [
-          { role: 'system', content: systemPrompt },
-          ...conversationMessages,
-        ],
+        [{ role: 'system', content: systemPrompt }, ...conversationMessages],
         { temperature: shouldForceFinish ? 0.35 : 0.7, maxTokens: 650 }
       ),
       assignment
     );
 
-    // 서버 사이드 가드: 최소 턴 미달 시 AI가 멋대로 종료하는 것을 차단
     if (parsedReply.finished && !allowFinish) {
       parsedReply = {
         finished: false,
@@ -623,15 +522,11 @@ export async function POST(request) {
     }
 
     if (shouldForceFinish && !parsedReply.finished) {
-      console.warn('Forced finalization fell back to default completion.', {
-        assignmentId,
-        conversationId,
-        assignmentType: assignment.type || 'math',
-      });
+      console.warn('Forced finalization fell back to default completion.', { assignmentId, conversationId });
       parsedReply = buildFallbackCompletion(assignment, parsedReply.reply);
     }
 
-    const { reply, finished, score, feedback, higherScoreTip, nextStepTip, reachedStage } = parsedReply;
+    const { reply, finished, score, feedback, higherScoreTip, nextStepTip } = parsedReply;
     const safeFeedback = typeof feedback === 'string' ? feedback : '';
     const safeHigherScoreTip = typeof higherScoreTip === 'string' ? higherScoreTip : '';
     const safeNextStepTip = typeof nextStepTip === 'string' ? nextStepTip : '';
@@ -654,15 +549,32 @@ export async function POST(request) {
       updateData.nextStepTip = safeNextStepTip;
       updateData.status = 'completed';
       updateData.approved = false;
+      updateData.approvalStatus = null;
       updateData.completedAt = FieldValue.serverTimestamp();
       updateData.sessionTokenHash = null;
-
-      if (isArt && reachedStage) {
-        updateData.reachedStage = reachedStage;
-      }
     }
 
     await conversationRef.update(updateData);
+
+    // Auto-send score to Grownd when chat completes
+    if (finished) {
+      const growndResult = await sendGrowndPoints(assignment, conversation, score);
+      if (growndResult?.success) {
+        await conversationRef.update({
+          approved: true,
+          approvedAt: FieldValue.serverTimestamp(),
+          approvalStatus: 'approved',
+        });
+      } else if (growndResult && !growndResult.success) {
+        await conversationRef.update({
+          approvalStatus: 'failed',
+          lastGrowndError: {
+            message: growndResult.error || '자동 전송 실패',
+            at: FieldValue.serverTimestamp(),
+          },
+        });
+      }
+    }
 
     const remainingTurns = Math.max(0, effectiveMaxTurns - studentTurnCount);
 
@@ -677,7 +589,6 @@ export async function POST(request) {
       remainingTurns,
       maxTurns: effectiveMaxTurns,
       currentTurn: studentTurnCount,
-      ...(isArt && reachedStage ? { reachedStage } : {}),
     });
 
     if (finished) {
@@ -692,24 +603,10 @@ export async function POST(request) {
 
     return response;
   } catch (error) {
-    console.error('=== Chat API Error Details ===');
-    console.error('Error message:', error?.message || 'Unknown error');
-    console.error('Error name:', error?.name || 'Unknown');
-    console.error('Error stack:', error?.stack || 'No stack trace');
+    console.error('Chat API Error:', error?.message || error);
     if (error?.response) {
       console.error('API Response status:', error.response.status);
-      console.error('API Response data:', JSON.stringify(error.response.data, null, 2));
     }
-    if (error?.code) {
-      console.error('Error code:', error.code);
-    }
-    try {
-      const bodyText = await request.clone().text();
-      console.error('Request body:', bodyText);
-    } catch (_) {
-      console.error('Could not read request body');
-    }
-    console.error('=== End Chat API Error ===');
     return NextResponse.json(
       { success: false, error: `서버 오류: ${error?.message || '알 수 없는 오류'}` },
       { status: 500 }

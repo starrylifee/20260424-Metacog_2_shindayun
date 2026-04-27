@@ -105,7 +105,7 @@ export default function TeacherDashboard() {
       <div className="page-container">
         <div className="entry-container">
           <div className="entry-card">
-            <div className="unicorn-avatar unicorn-avatar-large">👩‍🏫</div>
+            <div className="bot-avatar bot-avatar-large">👩‍🏫</div>
             <h1 className="heading-hero">
               <span className="heading-gradient">교사 로그인</span>
             </h1>
@@ -133,7 +133,7 @@ export default function TeacherDashboard() {
     <div className="page-container">
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
-          <span className="emoji">🦄</span> 메타인지 유니콘
+          <span className="emoji">🤖</span> 오늘배움봇
         </Link>
         <div className="navbar-actions">
           <Link href="/teacher/settings" className="btn btn-ghost btn-sm">
@@ -199,11 +199,8 @@ export default function TeacherDashboard() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <Link href="/teacher/assignments/new" className="btn btn-secondary">
-              ➕ 수학 과제
-            </Link>
-            <Link href="/teacher/assignments/art/new" className="btn btn-primary">
-              🎨 미술 과제
+            <Link href="/teacher/assignments/new" className="btn btn-primary">
+              ➕ 새 과제
             </Link>
           </div>
         </div>
@@ -307,7 +304,9 @@ export default function TeacherDashboard() {
                         {assignment.entryCode}
                       </strong>
                     </span>
-                    <span className="card-meta">{formatDate(assignment.createdAt)}</span>
+                    <span className="card-meta">
+                      👤 {assignment.participantCount ?? 0}명
+                    </span>
                   </div>
                 </div>
               </Link>

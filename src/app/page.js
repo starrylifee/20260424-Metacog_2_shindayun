@@ -1,26 +1,43 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 export default function HomePage() {
   const router = useRouter();
   const [entryCode, setEntryCode] = useState('');
-  const [studentNumber, setStudentNumber] = useState('');
+  const [studentName, setStudentName] = useState('');
+  const [studentPassword, setStudentPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [topAnswers, setTopAnswers] = useState([]);
+  const [topAnswersLoading, setTopAnswersLoading] = useState(false);
 
-  const handleStudentEntry = async (e) => {
-    e.preventDefault();
-    if (!entryCode.trim() || !studentNumber.trim()) {
-      setError('입장 코드와 출석번호를 모두 입력해주세요.');
+  useEffect(() => {
+    if (entryCode.length !== 6) {
+      setTopAnswers([]);
       return;
     }
 
-    const normalizedStudentNumber = Number(studentNumber);
-    if (!Number.isInteger(normalizedStudentNumber) || normalizedStudentNumber < 1 || normalizedStudentNumber > 99) {
-      setError('출석번호는 1부터 99 사이로 입력해주세요.');
+    let cancelled = false;
+    setTopAnswersLoading(true);
+
+    fetch(`/api/assignments/top-answers?code=${entryCode}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setTopAnswers(data.success ? data.topAnswers : []);
+      })
+      .catch(() => { if (!cancelled) setTopAnswers([]); })
+      .finally(() => { if (!cancelled) setTopAnswersLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [entryCode]);
+
+  const handleStudentEntry = async (e) => {
+    e.preventDefault();
+    if (!entryCode.trim() || !studentName.trim() || !studentPassword.trim()) {
+      setError('입장 코드, 이름, 비밀번호를 모두 입력해주세요.');
       return;
     }
 
@@ -37,7 +54,12 @@ export default function HomePage() {
         return;
       }
 
-      router.push(`/chat/${entryCode.toUpperCase()}?student=${normalizedStudentNumber}`);
+      sessionStorage.setItem(
+        'metacog_auth',
+        JSON.stringify({ name: studentName.trim(), password: studentPassword })
+      );
+
+      router.push(`/chat/${entryCode.toUpperCase()}`);
     } catch (err) {
       setError('서버 연결에 실패했어요. 다시 시도해주세요.');
       setLoading(false);
@@ -46,17 +68,17 @@ export default function HomePage() {
 
   return (
     <div className="page-container">
-      <div className="entry-container">
+      <div className="entry-container" style={{ alignItems: 'center', paddingTop: '3rem', paddingBottom: '3rem' }}>
         <div className="entry-card">
-          <div className="unicorn-avatar unicorn-avatar-large">
-            🦄
+          <div className="bot-avatar bot-avatar-large">
+            🤖
           </div>
 
           <h1 className="heading-hero">
-            <span className="heading-gradient">메타인지 유니콘</span>
+            <span className="heading-gradient">오늘배움봇</span>
           </h1>
           <p className="subtitle">
-            오늘 배운 것을 유니콘에게 설명해보세요!
+            오늘 배운 것을 오늘배움봇에게 설명해보세요!
           </p>
 
           <div className="card-glass">
@@ -77,17 +99,28 @@ export default function HomePage() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">🎒 출석번호</label>
+                <label className="form-label">🙋 이름</label>
                 <input
-                  id="student-number"
-                  type="number"
+                  id="student-name"
+                  type="text"
                   className="form-input form-input-large"
-                  placeholder="7"
-                  value={studentNumber}
-                  onChange={(e) => setStudentNumber(e.target.value)}
-                  min={1}
-                  max={99}
+                  placeholder="홍길동"
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
                   autoComplete="off"
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">🔑 비밀번호</label>
+                <input
+                  id="student-password"
+                  type="password"
+                  className="form-input form-input-large"
+                  placeholder="선생님이 알려주신 비밀번호"
+                  value={studentPassword}
+                  onChange={(e) => setStudentPassword(e.target.value)}
+                  autoComplete="current-password"
                 />
               </div>
 
@@ -104,7 +137,7 @@ export default function HomePage() {
                 disabled={loading}
                 style={{ width: '100%' }}
               >
-                {loading ? '입장 중...' : '🦄 유니콘 만나러 가기'}
+                {loading ? '확인 중...' : '🤖 오늘배움봇 만나러 가기'}
               </button>
             </form>
           </div>
@@ -115,6 +148,59 @@ export default function HomePage() {
             👩‍🏫 교사 로그인
           </Link>
         </div>
+
+        {(topAnswersLoading || topAnswers.length > 0) && (
+          <div style={{ width: '100%', maxWidth: '520px', marginTop: '2.5rem' }}>
+            <h3 style={{
+              fontSize: '1rem',
+              fontWeight: 700,
+              color: 'var(--purple-light)',
+              marginBottom: '0.75rem',
+              textAlign: 'left',
+            }}>
+              🏆 이 과제의 우수 답변 예시
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '1rem', textAlign: 'left' }}>
+              다른 친구들은 어떻게 설명했는지 참고해 보세요.
+            </p>
+
+            {topAnswersLoading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '1rem' }}>
+                <div className="loading-spinner" style={{ width: '28px', height: '28px' }} />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                {topAnswers.map((item, i) => (
+                  <div
+                    key={i}
+                    className="card"
+                    style={{ padding: '1rem 1.25rem' }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.5rem',
+                    }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        {item.label}
+                      </span>
+                      <span className="badge badge-score">{item.score}점</span>
+                    </div>
+                    <p style={{
+                      fontSize: '0.93rem',
+                      lineHeight: 1.65,
+                      color: 'var(--text-secondary)',
+                      margin: 0,
+                    }}>
+                      {item.answer}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

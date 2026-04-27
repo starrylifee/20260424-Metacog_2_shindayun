@@ -19,7 +19,7 @@ export async function GET(request) {
     }
 
     console.error('Teacher settings GET error:', error);
-    return NextResponse.json({ success: false, error: '?쒕쾭 ?ㅻ쪟' }, { status: 500 });
+    return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
   }
 }
 
@@ -33,10 +33,9 @@ export async function POST(request) {
       displayName = '',
       defaultMathMinTurns = null,
       defaultMathMaxTurns = null,
-      defaultArtMinTurns = null,
-      defaultArtMaxTurns = null,
       defaultMinStudentMessageBytes = null,
       defaultMaxStudentMessageBytes = null,
+      students = [],
     } = await request.json();
 
     const mathDefaults = getTeacherConstraintDefaults({
@@ -44,13 +43,20 @@ export async function POST(request) {
       defaultMathMaxTurns,
       defaultMinStudentMessageBytes,
       defaultMaxStudentMessageBytes,
-    }, 'math');
-    const artDefaults = getTeacherConstraintDefaults({
-      defaultArtMinTurns,
-      defaultArtMaxTurns,
-      defaultMinStudentMessageBytes,
-      defaultMaxStudentMessageBytes,
-    }, 'art');
+    });
+
+    // Validate and normalize student list
+    const normalizedStudents = Array.isArray(students)
+      ? students
+          .filter((s) => s && typeof s.name === 'string' && s.name.trim())
+          .map((s, index) => ({
+            name: s.name.trim(),
+            password: typeof s.password === 'string' ? s.password : '',
+            code: Number.isInteger(Number(s.code)) && Number(s.code) > 0
+              ? Number(s.code)
+              : index + 1,
+          }))
+      : [];
 
     const ref = adminDb.collection('teachers').doc(teacher.uid);
     const snapshot = await ref.get();
@@ -62,10 +68,9 @@ export async function POST(request) {
       displayName: displayName || teacher.name || '',
       defaultMathMinTurns: mathDefaults.minTurns,
       defaultMathMaxTurns: mathDefaults.maxTurns,
-      defaultArtMinTurns: artDefaults.minTurns,
-      defaultArtMaxTurns: artDefaults.maxTurns,
       defaultMinStudentMessageBytes: mathDefaults.minStudentMessageBytes,
       defaultMaxStudentMessageBytes: mathDefaults.maxStudentMessageBytes,
+      students: normalizedStudents,
       updatedAt: FieldValue.serverTimestamp(),
     };
 
@@ -85,6 +90,6 @@ export async function POST(request) {
     }
 
     console.error('Teacher settings POST error:', error);
-    return NextResponse.json({ success: false, error: '?쒕쾭 ?ㅻ쪟' }, { status: 500 });
+    return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
   }
 }

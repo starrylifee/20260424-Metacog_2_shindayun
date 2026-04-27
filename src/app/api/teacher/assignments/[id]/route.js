@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 
-import { buildArtAssignmentContent, buildArtAssignmentTitle } from '@/lib/artAssignment';
 import { generateUniqueEntryCode } from '@/lib/assignmentEntryCode';
 import { normalizeAssignmentConstraints } from '@/lib/chatConstraints';
 import { hasStudentStartedConversation } from '@/lib/conversationState';
@@ -83,7 +82,7 @@ async function duplicateAssignment(assignmentId, assignment, teacherUid) {
   const duplicatedAssignment = {
     teacherId: teacherUid,
     entryCode,
-    type: assignment.type === 'art' ? 'art' : 'math',
+    type: 'math',
     title: buildCopiedTitle(assignment.title),
     subject: String(assignment.subject || '').trim(),
     grade: String(assignment.grade || '').trim(),
@@ -104,20 +103,6 @@ async function duplicateAssignment(assignmentId, assignment, teacherUid) {
     updatedAt: FieldValue.serverTimestamp(),
   };
 
-  if (duplicatedAssignment.type === 'art') {
-    duplicatedAssignment.paintingTitle = String(assignment.paintingTitle || '').trim();
-    duplicatedAssignment.artist = String(assignment.artist || '').trim();
-    duplicatedAssignment.year = String(assignment.year || '').trim();
-    duplicatedAssignment.imageUrl = String(assignment.imageUrl || '').trim();
-    duplicatedAssignment.paintingContext = String(assignment.paintingContext || '').trim();
-    duplicatedAssignment.appreciationLevel = assignment.appreciationLevel ?? null;
-    duplicatedAssignment.appreciationLevelLabel = String(assignment.appreciationLevelLabel || '').trim();
-    duplicatedAssignment.appreciationPrompt = String(assignment.appreciationPrompt || '').trim();
-    duplicatedAssignment.difficultyLevel = String(assignment.difficultyLevel || '').trim();
-    duplicatedAssignment.difficultyLabel = String(assignment.difficultyLabel || '').trim();
-    duplicatedAssignment.difficultyPrompt = String(assignment.difficultyPrompt || '').trim();
-  }
-
   const docRef = await adminDb.collection('assignments').add(duplicatedAssignment);
 
   return {
@@ -127,14 +112,9 @@ async function duplicateAssignment(assignmentId, assignment, teacherUid) {
 }
 
 function buildUpdatedAssignmentData(existingAssignment, payload) {
-  const type = existingAssignment.type === 'art' ? 'art' : 'math';
-  const mergedAssignment = {
+  const normalizedConstraints = normalizeAssignmentConstraints({
     ...existingAssignment,
     ...payload,
-    type,
-  };
-  const normalizedConstraints = normalizeAssignmentConstraints({
-    ...mergedAssignment,
   });
   const validatedScoreOptions = validateScoreOptions(payload.scoreOptions);
 
@@ -142,24 +122,13 @@ function buildUpdatedAssignmentData(existingAssignment, payload) {
     throw new RequestError(validatedScoreOptions.error, 400);
   }
 
-  const title =
-    type === 'art'
-      ? buildArtAssignmentTitle(mergedAssignment)
-      : String(payload.title || '').trim();
+  const title = String(payload.title || '').trim();
+  if (!title) throw new RequestError('과제 제목을 입력해 주세요.', 400);
 
-  if (type !== 'art' && !title) {
-    throw new RequestError('과제 제목을 입력해 주세요.', 400);
-  }
+  const content = String(payload.content || '').trim();
+  if (!content) throw new RequestError('수업 내용을 입력해 주세요.', 400);
 
-  const content =
-    type === 'art'
-      ? String(payload.content || '').trim() || buildArtAssignmentContent(mergedAssignment)
-      : String(payload.content || '').trim();
-  if (type !== 'art' && !content) {
-    throw new RequestError('수업 내용을 입력해 주세요.', 400);
-  }
-
-  const updateData = {
+  return {
     title,
     subject: String(payload.subject || '').trim(),
     grade: String(payload.grade || '').trim(),
@@ -176,25 +145,6 @@ function buildUpdatedAssignmentData(existingAssignment, payload) {
     maxStudentMessageBytes: normalizedConstraints.maxStudentMessageBytes,
     updatedAt: FieldValue.serverTimestamp(),
   };
-
-  if (type === 'art') {
-    const paintingTitle = String(payload.paintingTitle || '').trim();
-    const artist = String(payload.artist || '').trim();
-
-    updateData.paintingTitle = paintingTitle;
-    updateData.artist = artist;
-    updateData.year = String(payload.year || '').trim();
-    updateData.imageUrl = String(payload.imageUrl || '').trim();
-    updateData.paintingContext = String(payload.paintingContext || '').trim();
-    updateData.appreciationLevel = payload.appreciationLevel ?? null;
-    updateData.appreciationLevelLabel = String(payload.appreciationLevelLabel || '').trim();
-    updateData.appreciationPrompt = String(payload.appreciationPrompt || '').trim();
-    updateData.difficultyLevel = String(payload.difficultyLevel || '').trim();
-    updateData.difficultyLabel = String(payload.difficultyLabel || '').trim();
-    updateData.difficultyPrompt = String(payload.difficultyPrompt || '').trim();
-  }
-
-  return updateData;
 }
 
 async function getAssignmentId(paramsPromise) {

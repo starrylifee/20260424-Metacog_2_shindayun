@@ -35,6 +35,9 @@ dev-server*.log*
 # vercel
 .vercel
 
+# claude code memory
+.claude/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
