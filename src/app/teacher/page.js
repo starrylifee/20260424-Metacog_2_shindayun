@@ -230,7 +230,7 @@ export default function TeacherDashboard() {
           </div>
         ) : (
           <div className="grid-2">
-            {assignments.map((assignment) => {
+            {assignments.map((assignment, index) => {
               const chatConstraints = normalizeAssignmentConstraints(assignment);
 
               return (
@@ -247,6 +247,7 @@ export default function TeacherDashboard() {
                       marginBottom: '0.35rem',
                     }}
                   >
+                    <span style={{ color: 'var(--primary)', fontWeight: 700, marginRight: '0.5rem' }}>#{index + 1}</span>
                     최소 {chatConstraints.minTurns}턴 후 채점 · 최대 {chatConstraints.maxTurns}턴
                   </p>
                   <p

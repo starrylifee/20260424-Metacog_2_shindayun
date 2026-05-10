@@ -22,7 +22,7 @@ export async function GET(request) {
     const assignmentDocs = snapshot.docs.sort((a, b) => {
       const aTime = a.data().createdAt?.toMillis?.() ?? 0;
       const bTime = b.data().createdAt?.toMillis?.() ?? 0;
-      return bTime - aTime;
+      return aTime - bTime;
     });
     const countResults = await Promise.all(
       assignmentDocs.map((doc) =>
