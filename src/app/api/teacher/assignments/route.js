@@ -17,10 +17,13 @@ export async function GET(request) {
     const snapshot = await adminDb
       .collection('assignments')
       .where('teacherId', '==', teacher.uid)
-      .orderBy('createdAt', 'desc')
       .get();
 
-    const assignmentDocs = snapshot.docs;
+    const assignmentDocs = snapshot.docs.sort((a, b) => {
+      const aTime = a.data().createdAt?.toMillis?.() ?? 0;
+      const bTime = b.data().createdAt?.toMillis?.() ?? 0;
+      return bTime - aTime;
+    });
     const countResults = await Promise.all(
       assignmentDocs.map((doc) =>
         adminDb.collection('conversations').where('assignmentId', '==', doc.id).count().get()

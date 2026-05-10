@@ -22,7 +22,7 @@ import { FieldValue, adminDb } from '@/lib/serverDb';
 let _openai = null;
 function getOpenAI() {
   if (!_openai) {
-    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY?.trim() });
   }
   return _openai;
 }
@@ -665,7 +665,7 @@ export async function POST(request) {
       console.error('API Response status:', error.response.status);
     }
     return NextResponse.json(
-      { success: false, error: `서버 오류: ${error?.message || '알 수 없는 오류'}` },
+      { success: false, error: '서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.' },
       { status: 500 }
     );
   }

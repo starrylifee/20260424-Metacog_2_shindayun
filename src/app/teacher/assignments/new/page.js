@@ -142,7 +142,7 @@ export default function NewAssignment() {
         ),
       }))
       .filter((unit) => unit.unit && unit.lessons.length > 0);
-  }, [selectedGrade, selectedSemester]);
+  }, [selectedGrade, selectedSemester, activePlanData]);
 
   const selectedUnitData = useMemo(
     () => mathUnits.find((unit) => unit.unit === selectedUnit) || null,
@@ -335,9 +335,11 @@ export default function NewAssignment() {
                 fontSize: '3rem',
                 fontWeight: 800,
                 letterSpacing: '0.2em',
-                background: 'var(--gradient-bot)',
+                background: 'linear-gradient(135deg, var(--primary), var(--primary-bright))',
                 WebkitBackgroundClip: 'text',
+                backgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
+                color: 'transparent',
               }}
             >
               {created.entryCode}
@@ -397,7 +399,7 @@ export default function NewAssignment() {
 
           {/* ── 1. 과목 선택 ── */}
           <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--primary)' }}>
               과목 선택
             </h3>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -416,7 +418,7 @@ export default function NewAssignment() {
 
           {/* ── 2. 학년/학기 + 차시 선택 ── */}
           <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', color: 'var(--primary)' }}>
               {selectedSubject} 차시 선택
             </h3>
 
@@ -555,7 +557,7 @@ export default function NewAssignment() {
 
           {/* ── 4. 오늘 배운 내용 + 키워드 ── */}
           <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', color: 'var(--primary)' }}>
               오늘 실제로 배운 내용 (선택)
             </h3>
 
@@ -588,7 +590,7 @@ export default function NewAssignment() {
 
           {/* ── 5. 채점 설정 ── */}
           <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+            <h3 style={{ marginBottom: '1.5rem', fontSize: '1rem', color: 'var(--primary)' }}>
               채점 설정
             </h3>
 
@@ -666,7 +668,7 @@ export default function NewAssignment() {
 
           {/* ── 6. 대화 설정 (통합) ── */}
           <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
-            <h3 style={{ marginBottom: '0.5rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+            <h3 style={{ marginBottom: '0.5rem', fontSize: '1rem', color: 'var(--primary)' }}>
               대화 설정
             </h3>
             <p className="form-hint" style={{ marginBottom: '1.5rem' }}>
@@ -729,7 +731,7 @@ export default function NewAssignment() {
                         textAlign: 'left',
                         padding: '0.9rem 1rem',
                         borderRadius: 'var(--radius-md)',
-                        border: `1px solid ${isSelected ? 'var(--purple-light)' : 'var(--border-color)'}`,
+                        border: `1px solid ${isSelected ? 'var(--primary)' : 'var(--border-color)'}`,
                         background: isSelected ? 'rgba(168, 85, 247, 0.12)' : 'rgba(255, 255, 255, 0.03)',
                         color: isAvailable ? 'var(--text-primary)' : 'var(--text-muted)',
                         cursor: isAvailable ? 'pointer' : 'not-allowed',
