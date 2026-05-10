@@ -171,7 +171,7 @@ export default function HomePage() {
             <h3 style={{
               fontSize: '1rem',
               fontWeight: 700,
-              color: 'var(--purple-light)',
+              color: 'var(--primary)',
               marginBottom: '0.75rem',
               textAlign: 'left',
             }}>

@@ -1,91 +1,125 @@
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css');
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap');
 
+/* ===================================================================
+   HP Design System Tokens
+   Primary: HP Electric Blue #024ad8  |  Surface: white / #f7f7f7 / #e8e8e8
+   Type: Manrope (Forma DJR Micro substitute)
+=================================================================== */
 :root {
-  --primary: #7c3aed;
-  --primary-hover: #6d28d9;
-  --primary-light: #ede9fe;
-  --primary-subtle: #f5f3ff;
+  /* Brand & Accent */
+  --primary:        #024ad8; /* HP Electric Blue */
+  --primary-hover:  #0e3191; /* primary-deep — pressed state */
+  --primary-bright: #296ef9; /* bright blue for dark slabs */
+  --primary-light:  #c9e0fc; /* primary-soft — selection chips */
+  --primary-subtle: #e8f0fe; /* pale tint for focus rings */
 
-  --accent: #f59e0b;
-  --accent-hover: #d97706;
-  --accent-light: #fef9c3;
+  /* Legacy accent (kept for components that still reference it) */
+  --accent:       #024ad8;
+  --accent-hover: #0e3191;
+  --accent-light: #c9e0fc;
 
-  --bg: #ffffff;
-  --bg-surface: #f9fafb;
-  --bg-card: #ffffff;
+  /* Surface */
+  --bg:         #ffffff; /* canvas */
+  --bg-surface: #f7f7f7; /* cloud band */
+  --bg-card:    #ffffff; /* paper */
+  --bg-fog:     #e8e8e8; /* fog band */
 
-  --text: #111827;
-  --text-secondary: #4b5563;
-  --text-muted: #9ca3af;
+  /* Text */
+  --text:           #1a1a1a; /* ink */
+  --text-secondary: #3d3d3d; /* charcoal */
+  --text-muted:     #636363; /* graphite */
   --text-on-primary: #ffffff;
 
-  --border: #e5e7eb;
-  --border-focus: #7c3aed;
+  /* Borders */
+  --border:       #e8e8e8; /* fog / hairline */
+  --border-focus: #024ad8;
+  --steel:        #c2c2c2;
 
-  --danger: #ef4444;
-  --danger-bg: #fef2f2;
-  --success: #22c55e;
+  /* Semantic */
+  --danger:     #b3262b; /* bloom-deep */
+  --danger-bg:  #f9d4d2; /* bloom-rose */
+  --success:    #22c55e;
   --success-bg: #f0fdf4;
 
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0,0,0,0.03);
-  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(0,0,0,0.03);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.10);
-  --shadow-primary: 0 4px 14px rgba(124, 58, 237, 0.28);
+  /* Elevation
+     Level 0 — flat: no shadow
+     Level 1 — hairline: 1px solid var(--border)
+     Level 2 — soft lift (cards, pricing tiers)
+     Level 3 — floating modal                        */
+  --shadow-xs: none;
+  --shadow-sm: 0 2px 8px rgba(26, 26, 26, 0.08);
+  --shadow-md: 0 8px 24px rgba(26, 26, 26, 0.12);
+  --shadow-lg: 0 12px 32px rgba(26, 26, 26, 0.15);
+  --shadow-primary: 0 4px 14px rgba(2, 74, 216, 0.28);
 
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  /* Border Radius
+     Buttons → 4px (--radius-btn)
+     Cards   → 16px (--radius-xl / --radius-lg)
+     Two-tier split is the HP visual signature        */
+  --radius-btn:  4px;
+  --radius-sm:   8px;
+  --radius-md:   8px;
+  --radius-lg:   16px;
+  --radius-xl:   16px;
   --radius-full: 9999px;
 
-  /* 하위 호환 별칭 */
-  --bg-primary: var(--bg);
-  --bg-secondary: var(--bg-card);
-  --bg-input: var(--bg);
-  --colors-primary: var(--primary);
-  --colors-primary-focus: var(--primary-hover);
-  --colors-canvas: var(--bg);
+  /* Spacing (8px base) */
+  --space-xxs:     4px;
+  --space-xs:      8px;
+  --space-sm:      12px;
+  --space-md:      16px;
+  --space-lg:      20px;
+  --space-xl:      24px;
+  --space-xxl:     32px;
+  --space-section: 80px;
+
+  /* ── Backward-compat aliases (kept so no page.js edits needed) ── */
+  --bg-primary:              var(--bg);
+  --bg-secondary:            var(--bg-card);
+  --bg-input:                var(--bg);
+  --colors-primary:          var(--primary);
+  --colors-primary-focus:    var(--primary-hover);
+  --colors-canvas:           var(--bg);
   --colors-canvas-parchment: var(--bg-surface);
-  --colors-ink: var(--text);
-  --colors-ink-muted-48: var(--text-muted);
-  --colors-hairline: var(--border);
-  --colors-divider-soft: #f3f4f6;
-  --purple-primary: var(--primary);
-  --purple-light: var(--primary);
-  --cyan-primary: var(--primary);
-  --green-primary: #16a34a;
-  --yellow-primary: #d97706;
-  --orange-primary: #ea580c;
-  --text-primary: var(--text);
-  --text-secondary: var(--text-secondary);
-  --text-muted: var(--text-muted);
-  --border-color: var(--border);
+  --colors-ink:              var(--text);
+  --colors-ink-muted-48:     var(--text-muted);
+  --colors-hairline:         var(--border);
+  --colors-divider-soft:     #f3f4f6;
+  --purple-primary:          var(--primary);
+  --purple-light:            var(--primary);
+  --cyan-primary:            var(--primary);
+  --green-primary:           #16a34a;
+  --yellow-primary:          #d97706;
+  --orange-primary:          #ea580c;
+  --text-primary:            var(--text);
+  --border-color:            var(--border);
 }
 
+/* ===================================================================
+   Reset
+=================================================================== */
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
-html, body {
-  height: 100%;
-}
+html, body { height: 100%; }
 
 body {
-  font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont,
-    'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif;
+  font-family: 'Manrope', 'Apple SD Gothic Neo', 'Noto Sans KR', Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
-  font-size: 15px;
-  line-height: 1.6;
-  letter-spacing: -0.01em;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== Layout ===== */
+/* ===================================================================
+   Layout
+=================================================================== */
 .page-container {
   position: relative;
   min-height: 100vh;
@@ -104,10 +138,12 @@ body {
 .content-narrow { max-width: 600px; }
 .content-medium { max-width: 800px; }
 
-/* ===== Footer ===== */
+/* ===================================================================
+   Footer — dark-navy slab (HP pattern: close every page with ink)
+=================================================================== */
 .site-footer {
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border);
+  background: var(--text); /* ink #1a1a1a */
+  border-top: none;
 }
 
 .site-footer-inner {
@@ -123,7 +159,7 @@ body {
 }
 
 .site-footer-copy {
-  color: var(--text-muted);
+  color: var(--steel);
   font-size: 12px;
 }
 
@@ -135,25 +171,27 @@ body {
 }
 
 .site-footer-links a {
-  color: var(--text-muted);
+  color: var(--steel);
   font-size: 12px;
   text-decoration: none;
 }
 
 .site-footer-links a:hover {
-  color: var(--text);
+  color: #ffffff;
   text-decoration: underline;
 }
 
-.site-footer-divider { color: var(--border); }
+.site-footer-divider { color: var(--steel); }
 
-/* ===== Navbar ===== */
+/* ===================================================================
+   Navbar
+=================================================================== */
 .navbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 1.5rem;
-  height: 52px;
+  height: 64px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
   position: sticky;
@@ -167,16 +205,11 @@ body {
   gap: 0.5rem;
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: -0.02em;
   color: var(--primary);
   text-decoration: none;
-  background: none !important;
-  -webkit-background-clip: unset !important;
-  -webkit-text-fill-color: var(--primary) !important;
-  background-clip: unset !important;
 }
 
-.navbar-brand .emoji { font-size: 1.1rem; -webkit-text-fill-color: initial; }
+.navbar-brand .emoji { font-size: 1.1rem; }
 
 .navbar-actions {
   display: flex;
@@ -195,32 +228,31 @@ body {
 .navbar-user img {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: 4px; /* HP: avatars use 4px, not circle */
   border: 1px solid var(--border);
 }
 
-/* ===== Typography ===== */
+/* ===================================================================
+   Typography — Manrope / HP weight 500 display, 400 body
+=================================================================== */
 .heading-hero {
-  font-size: 38px;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.03em;
+  font-size: 44px;
+  font-weight: 500; /* HP: weight 500 even at hero scale */
+  line-height: 1.0;
+  letter-spacing: 0;
   margin-bottom: 1rem;
   color: var(--text);
 }
 
 .heading-gradient {
   color: var(--primary);
-  background: none !important;
-  -webkit-background-clip: unset !important;
-  -webkit-text-fill-color: var(--primary) !important;
-  background-clip: unset !important;
 }
 
 .heading-section {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.17;
+  letter-spacing: 0;
   margin-bottom: 1rem;
   color: var(--text);
 }
@@ -230,15 +262,17 @@ body {
   font-weight: 400;
   color: var(--text-secondary);
   margin-bottom: 2rem;
-  line-height: 1.6;
+  line-height: 1.38;
 }
 
-/* ===== Cards ===== */
+/* ===================================================================
+   Cards — soft lift shadow, 16px radius
+=================================================================== */
 .card {
   background: var(--bg-card);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl); /* 16px */
   padding: 1.5rem;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-sm);   /* Soft Lift */
   transition: box-shadow 0.18s ease, transform 0.18s ease;
 }
 
@@ -249,95 +283,99 @@ body {
 
 .card-glass {
   background: var(--bg-card);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   padding: 2rem;
   box-shadow: var(--shadow-sm);
 }
 
 .card-title {
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0;
   margin-bottom: 0.5rem;
   color: var(--text);
 }
 
 .card-meta {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-muted);
 }
 
-/* ===== Buttons ===== */
+/* ===================================================================
+   Buttons — sharp 4px radius (HP two-tier philosophy)
+   Button labels: uppercase, 0.7px tracking, weight 600
+=================================================================== */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  padding: 10px 20px;
+  padding: 12px 24px;        /* HP: 12×24 = 44px height */
+  height: 44px;
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-btn); /* 4px — HP signature */
   font-family: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0.7px;
+  text-transform: uppercase; /* HP: only place the system tracks letters */
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
   text-decoration: none;
   white-space: nowrap;
-  line-height: 1;
+  line-height: 1.4;
 }
 
+/* button-primary — the lone HP Electric Blue CTA */
 .btn-primary {
   background: var(--primary);
   color: #ffffff;
   box-shadow: var(--shadow-primary);
 }
 
-.btn-primary:hover {
-  background: var(--primary-hover);
-  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.36);
-}
-
-.btn-primary:active { transform: scale(0.96); }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-primary:active { transform: scale(0.97); }
 
 .btn-large {
   padding: 14px 28px;
-  font-size: 16px;
+  height: 48px;
+  font-size: 14px;
 }
 
+/* button-outline — blue-text outlined CTA */
 .btn-secondary {
   background: var(--bg);
   color: var(--primary);
-  border: 1.5px solid var(--primary);
+  border: 1px solid var(--primary);
 }
 
-.btn-secondary:hover {
-  background: var(--primary-subtle);
-}
+.btn-secondary:hover { background: var(--primary-subtle); }
+.btn-secondary:active { transform: scale(0.97); }
 
-.btn-secondary:active { transform: scale(0.96); }
-
+/* button-ink — black filled CTA (dark photo overlays) */
 .btn-accent {
-  background: var(--accent);
+  background: var(--text); /* ink */
   color: #ffffff;
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.3);
 }
 
-.btn-accent:hover { background: var(--accent-hover); }
+.btn-accent:hover { background: var(--text-secondary); }
 
+/* button-outline-ink */
 .btn-danger {
   background: transparent;
   color: var(--danger);
-  border: 1.5px solid rgba(239, 68, 68, 0.4);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--danger);
 }
 
 .btn-danger:hover { background: var(--danger-bg); }
 
+/* ghost nav button */
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-btn);
+  text-transform: none;       /* ghost/nav labels stay sentence case */
+  letter-spacing: 0;
 }
 
 .btn-ghost:hover {
@@ -345,7 +383,6 @@ body {
   background: rgba(0, 0, 0, 0.04);
 }
 
-/* Navbar ghost — 흰 배경이므로 dark 계열 */
 .navbar .btn-ghost {
   color: var(--text-secondary);
   font-size: 13px;
@@ -358,17 +395,22 @@ body {
 }
 
 .btn-ghost:active,
-.navbar .btn-ghost:active { transform: scale(0.95); }
+.navbar .btn-ghost:active { transform: scale(0.96); }
 
 .btn-sm {
   padding: 6px 14px;
-  font-size: 13px;
+  height: auto;
+  font-size: 12.6px;
+  letter-spacing: 0.126px;
 }
 
 .btn-icon {
   padding: 0.5rem;
   aspect-ratio: 1;
-  border-radius: var(--radius-sm);
+  height: auto;
+  border-radius: var(--radius-btn);
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .btn:disabled {
@@ -378,14 +420,15 @@ body {
   box-shadow: none !important;
 }
 
-/* ===== Forms ===== */
+/* ===================================================================
+   Forms — 4px radius inputs (match button sharpness)
+=================================================================== */
 .form-group { margin-bottom: 1.25rem; }
 
 .form-label {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: -0.01em;
   color: var(--text-secondary);
   margin-bottom: 0.4rem;
 }
@@ -393,27 +436,26 @@ body {
 .form-input {
   width: 100%;
   padding: 11px 16px;
+  height: 44px;
   background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--steel);
+  border-radius: var(--radius-btn); /* 4px — HP input radius */
   color: var(--text);
   font-family: inherit;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-size: 16px;
+  transition: border-color 0.15s ease;
 }
 
 .form-textarea {
   width: 100%;
   padding: 11px 14px;
   background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--steel);
+  border-radius: var(--radius-btn);
   color: var(--text);
   font-family: inherit;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-size: 16px;
+  transition: border-color 0.15s ease;
   resize: vertical;
   min-height: 100px;
 }
@@ -421,22 +463,21 @@ body {
 .form-select {
   width: 100%;
   padding: 11px 14px;
+  height: 44px;
   background: var(--bg);
-  border: 1.5px solid var(--border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--steel);
+  border-radius: var(--radius-btn);
   color: var(--text);
   font-family: inherit;
-  font-size: 15px;
-  letter-spacing: -0.01em;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-size: 16px;
+  transition: border-color 0.15s ease;
 }
 
 .form-input:focus,
 .form-textarea:focus,
 .form-select:focus {
   outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+  border-color: var(--text); /* HP: ink border on focus, no halo */
 }
 
 .form-input::placeholder,
@@ -448,25 +489,27 @@ body {
   margin-top: 0.3rem;
 }
 
-/* 입장코드 전용 — 이름/비밀번호에는 적용 안 됨 */
+/* 입장코드 전용 */
 .form-input-code {
   font-size: 22px;
-  font-weight: 800;
+  font-weight: 700;
   text-align: center;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-btn);
   padding: 14px 20px;
+  height: auto;
 }
 
-/* 하위 호환: form-input-large는 크기만 */
 .form-input-large {
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 500;
   padding: 13px 18px;
 }
 
-/* ===== Grid ===== */
+/* ===================================================================
+   Grid
+=================================================================== */
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -479,16 +522,17 @@ body {
   gap: 1.25rem;
 }
 
-/* ===== Badge ===== */
+/* ===================================================================
+   Badge / Pill
+=================================================================== */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  padding: 3px 10px;
-  border-radius: var(--radius-full);
+  padding: 4px 12px;
+  border-radius: 8px; /* rounded-lg in HP */
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: -0.01em;
 }
 
 .badge-active {
@@ -501,14 +545,18 @@ body {
   color: #c2410c;
 }
 
+/* badge-pill-ink — HP filled tag */
 .badge-score {
   background: var(--primary);
   color: #ffffff;
   font-size: 13px;
   padding: 4px 12px;
+  border-radius: 8px;
 }
 
-/* ===== Chat ===== */
+/* ===================================================================
+   Chat
+=================================================================== */
 .chat-container {
   display: flex;
   flex-direction: column;
@@ -546,7 +594,7 @@ body {
   align-self: flex-end;
   padding: 0.75rem 1rem;
   border-radius: var(--radius-full);
-  border: 1.5px solid var(--border);
+  border: 1px solid var(--border);
   background: var(--bg);
   color: var(--text);
   font: inherit;
@@ -558,7 +606,7 @@ body {
 
 .art-reference-card {
   background: var(--bg);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   padding: 0.9rem;
   box-shadow: var(--shadow-md);
 }
@@ -582,7 +630,7 @@ body {
 .art-reference-card-header h3 {
   margin-top: 0.2rem;
   font-size: 16px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.35;
   color: var(--text);
 }
@@ -590,8 +638,8 @@ body {
 .art-reference-close {
   width: 30px;
   height: 30px;
-  border: 1.5px solid var(--border);
-  border-radius: 50%;
+  border: 1px solid var(--border);
+  border-radius: 4px;
   background: var(--bg-surface);
   color: var(--text-secondary);
   font: inherit;
@@ -602,7 +650,7 @@ body {
 
 .art-reference-image-wrap {
   overflow: hidden;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border);
   background: var(--bg-surface);
 }
@@ -617,7 +665,7 @@ body {
 .art-reference-caption {
   margin: 0.8rem 0.25rem 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -632,8 +680,7 @@ body {
 
 .chat-header-info h2 {
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-weight: 500;
   color: var(--text);
 }
 
@@ -650,20 +697,20 @@ body {
   flex-direction: column;
   gap: 0.85rem;
   scroll-behavior: smooth;
-  background: var(--bg-surface);
+  background: var(--bg-surface); /* cloud band */
 }
 
 .chat-messages::-webkit-scrollbar { width: 4px; }
 .chat-messages::-webkit-scrollbar-track { background: transparent; }
 .chat-messages::-webkit-scrollbar-thumb {
-  background: var(--border);
+  background: var(--steel);
   border-radius: 2px;
 }
 
 .chat-bubble {
   max-width: 78%;
   padding: 12px 16px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl); /* 16px — card tier */
   line-height: 1.6;
   font-size: 15px;
   animation: bubbleIn 0.18s ease;
@@ -678,7 +725,7 @@ body {
 .chat-bubble-unicorn {
   align-self: flex-start;
   background: var(--bg);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm);
   border-bottom-left-radius: 4px;
   color: var(--text);
 }
@@ -704,7 +751,7 @@ body {
 .chat-sender {
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.04em;
   color: var(--primary);
   margin-bottom: 0.2rem;
   text-transform: uppercase;
@@ -727,7 +774,9 @@ body {
 .chat-input-row .form-input { flex: 1; }
 .chat-input-row .btn { flex-shrink: 0; }
 
-/* ===== Bot Avatar ===== */
+/* ===================================================================
+   Bot Avatar
+=================================================================== */
 .bot-avatar {
   width: 44px;
   height: 44px;
@@ -743,7 +792,9 @@ body {
   margin: 0 auto 1.25rem;
 }
 
-/* ===== Score Display ===== */
+/* ===================================================================
+   Score Display
+=================================================================== */
 .score-display {
   text-align: center;
   padding: 2rem 1.5rem;
@@ -757,8 +808,8 @@ body {
 
 .score-label {
   font-size: 36px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--primary);
 }
 
@@ -766,14 +817,16 @@ body {
   margin-top: 1rem;
   padding: 1rem 1.25rem;
   background: var(--primary-subtle);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xl);
   color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.65;
   text-align: left;
 }
 
-/* ===== Entry Page ===== */
+/* ===================================================================
+   Entry Page
+=================================================================== */
 .entry-container {
   display: flex;
   flex-direction: column;
@@ -806,7 +859,9 @@ body {
   background: var(--border);
 }
 
-/* ===== Stats ===== */
+/* ===================================================================
+   Stats
+=================================================================== */
 .stats-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -817,20 +872,16 @@ body {
 .stat-card {
   padding: 1.1rem;
   background: var(--bg);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
   text-align: center;
 }
 
 .stat-value {
   font-size: 36px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-weight: 500;
+  letter-spacing: 0;
   color: var(--primary);
-  background: none !important;
-  -webkit-background-clip: unset !important;
-  -webkit-text-fill-color: var(--primary) !important;
-  background-clip: unset !important;
 }
 
 .stat-label {
@@ -840,10 +891,12 @@ body {
   margin-top: 0.2rem;
 }
 
-/* ===== Table ===== */
+/* ===================================================================
+   Table
+=================================================================== */
 .table-wrapper {
   overflow-x: auto;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
 }
 
@@ -861,21 +914,23 @@ body {
   letter-spacing: 0.04em;
   color: var(--text-muted);
   text-transform: uppercase;
-  background: var(--bg-surface);
+  background: var(--bg-surface); /* cloud band */
   border-bottom: 1px solid var(--border);
 }
 
 .data-table td {
   padding: 11px 14px;
   font-size: 14px;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid var(--border);
   color: var(--text);
 }
 
 .data-table tr:last-child td { border-bottom: none; }
-.data-table tr:hover td { background: #fafafa; }
+.data-table tr:hover td { background: var(--bg-surface); }
 
-/* ===== Loading ===== */
+/* ===================================================================
+   Loading
+=================================================================== */
 .loading-container {
   display: flex;
   flex-direction: column;
@@ -918,7 +973,9 @@ body {
   40%            { transform: scale(1);   opacity: 1; }
 }
 
-/* ===== Empty State ===== */
+/* ===================================================================
+   Empty State
+=================================================================== */
 .empty-state {
   text-align: center;
   padding: 3rem 2rem;
@@ -937,10 +994,12 @@ body {
   font-weight: 500;
 }
 
-/* ===== Legal ===== */
+/* ===================================================================
+   Legal
+=================================================================== */
 .legal-card {
   background: var(--bg);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   padding: 2rem;
   box-shadow: var(--shadow-sm);
 }
@@ -963,7 +1022,7 @@ body {
 }
 
 .legal-section { display: flex; flex-direction: column; gap: 0.75rem; }
-.legal-section h2 { color: var(--text); font-size: 15px; font-weight: 700; }
+.legal-section h2 { color: var(--text); font-size: 15px; font-weight: 500; }
 
 .legal-section ul,
 .legal-section ol {
@@ -972,7 +1031,9 @@ body {
   gap: 0.5rem;
 }
 
-/* ===== Responsive ===== */
+/* ===================================================================
+   Responsive
+=================================================================== */
 @media (max-width: 980px) {
   .art-chat-layout { width: 100%; display: block; }
   .chat-container-art { max-width: 760px; margin: 0 auto; }
@@ -994,11 +1055,11 @@ body {
 
 @media (max-width: 768px) {
   .content-wrapper { padding: 1rem; }
-  .heading-hero { font-size: 28px; }
+  .heading-hero { font-size: 32px; }
   .heading-section { font-size: 20px; }
   .grid-2 { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr; }
-  .navbar { padding: 0 1rem; }
+  .navbar { padding: 0 1rem; height: 52px; }
   .stats-row { grid-template-columns: repeat(2, 1fr); }
   .chat-bubble { max-width: 88%; }
   .site-footer-inner { padding: 1rem; }
