@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import BotAvatar from '@/components/BotAvatar';
 
 export default function HomePage() {
   const router = useRouter();
@@ -71,7 +72,7 @@ export default function HomePage() {
       <div className="entry-container" style={{ alignItems: 'center', paddingTop: '3rem', paddingBottom: '3rem' }}>
         <div className="entry-card">
           <div className="bot-avatar bot-avatar-large">
-            🤖
+            <BotAvatar size={88} />
           </div>
 
           <h1 className="heading-hero">
@@ -88,7 +89,7 @@ export default function HomePage() {
                 <input
                   id="entry-code"
                   type="text"
-                  className="form-input form-input-large"
+                  className="form-input form-input-code"
                   placeholder="SUNNY42"
                   value={entryCode}
                   onChange={(e) => setEntryCode(e.target.value.toUpperCase())}

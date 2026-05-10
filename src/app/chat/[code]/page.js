@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import BotAvatar from '@/components/BotAvatar';
 
 import { bytesToApproxChars, formatStudentMessageByteRange, getUtf8ByteLength } from '@/lib/chatConstraints';
 import { getStudentMessageCount } from '@/lib/conversationState';
@@ -247,7 +248,7 @@ export default function ChatPage() {
     return (
       <div className="page-container">
         <div className="loading-container">
-          <div className="bot-avatar bot-avatar-large">🤖</div>
+          <div className="bot-avatar bot-avatar-large"><BotAvatar size={88} /></div>
           <p style={{ color: 'var(--text-secondary)' }}>오늘배움봇을 켜고 있어요...</p>
           <div className="loading-spinner" />
         </div>
@@ -285,7 +286,7 @@ export default function ChatPage() {
     <div className="page-container">
       <div className="chat-container">
         <div className="chat-header">
-          <div className="bot-avatar">🤖</div>
+          <div className="bot-avatar"><BotAvatar size={40} /></div>
           <div className="chat-header-info">
             <h2>오늘배움봇과 대화 중</h2>
             <p>{assignment.title} · {studentName}</p>
