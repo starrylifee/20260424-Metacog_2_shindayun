@@ -247,7 +247,7 @@ export default function ChatPage() {
     return (
       <div className="page-container">
         <div className="loading-container">
-          <div className="bot-avatar bot-avatar-large">🦄</div>
+          <div className="bot-avatar bot-avatar-large">🤖</div>
           <p style={{ color: 'var(--text-secondary)' }}>오늘배움봇을 켜고 있어요...</p>
           <div className="loading-spinner" />
         </div>
@@ -295,10 +295,10 @@ export default function ChatPage() {
               className="badge"
               style={{
                 background: turnInfo.remaining <= 2
-                  ? 'rgba(255, 100, 100, 0.2)'
-                  : 'rgba(139, 92, 246, 0.2)',
-                color: turnInfo.remaining <= 2 ? '#ff8a8a' : 'var(--primary)',
-                border: `1px solid ${turnInfo.remaining <= 2 ? 'rgba(255,100,100,0.3)' : 'rgba(139,92,246,0.3)'}`,
+                  ? 'rgba(215, 0, 21, 0.08)'
+                  : 'rgba(0, 102, 204, 0.08)',
+                color: turnInfo.remaining <= 2 ? '#d70015' : 'var(--colors-primary)',
+                border: `1px solid ${turnInfo.remaining <= 2 ? 'rgba(215,0,21,0.2)' : 'rgba(0,102,204,0.2)'}`,
                 padding: '0.25rem 0.6rem',
                 borderRadius: '999px',
                 fontSize: '0.75rem',
@@ -317,7 +317,7 @@ export default function ChatPage() {
         <div className="chat-messages">
           {messages.map((message, index) => (
             <div key={index} className={`chat-bubble chat-bubble-${message.role}`}>
-              {message.role === 'bot' || message.role === 'unicorn' && (
+              {(message.role === 'bot' || message.role === 'unicorn') && (
                 <div className="chat-sender">오늘배움봇</div>
               )}
               <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
@@ -361,10 +361,9 @@ export default function ChatPage() {
           <div className="chat-input-area">
             {turnInfo.max > 0 && turnInfo.remaining <= 2 && turnInfo.remaining > 0 && (
               <div style={{
-                fontSize: '0.72rem',
-                color: turnInfo.remaining === 1 ? '#ff8a8a' : 'var(--text-muted)',
+                fontSize: '12px',
+                color: turnInfo.remaining === 1 ? '#d70015' : 'var(--text-muted)',
                 textAlign: 'center',
-                paddingBottom: '0.35rem',
                 fontWeight: 500,
               }}>
                 {turnInfo.remaining === 1
@@ -374,35 +373,36 @@ export default function ChatPage() {
             )}
             {assignment?.minStudentMessageBytes && assignment?.maxStudentMessageBytes && (
               <div style={{
-                fontSize: '0.72rem',
-                color: inputLengthError ? '#ff8a8a' : 'var(--text-muted)',
+                fontSize: '12px',
+                color: inputLengthError ? '#d70015' : 'var(--text-muted)',
                 textAlign: 'center',
-                paddingBottom: '0.35rem',
                 fontWeight: 500,
               }}>
                 {inputLengthError || `현재 ${bytesToApproxChars(inputByteLength)}글자 · 권장 범위 ${byteRangeLabel}`}
               </div>
             )}
-            <input
-              ref={inputRef}
-              id="chat-input"
-              type="text"
-              className="form-input"
-              placeholder="오늘배움봇에게 설명해 보세요..."
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={handleKeyDown}
-              disabled={sending}
-              autoComplete="off"
-            />
-            <button
-              id="btn-send"
-              className="btn btn-primary"
-              onClick={() => void sendMessage()}
-              disabled={sending || !input.trim() || Boolean(inputLengthError)}
-            >
-              {sending ? '...' : '전송'}
-            </button>
+            <div className="chat-input-row">
+              <input
+                ref={inputRef}
+                id="chat-input"
+                type="text"
+                className="form-input"
+                placeholder="오늘배움봇에게 설명해 보세요..."
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={handleKeyDown}
+                disabled={sending}
+                autoComplete="off"
+              />
+              <button
+                id="btn-send"
+                className="btn btn-primary"
+                onClick={() => void sendMessage()}
+                disabled={sending || !input.trim() || Boolean(inputLengthError)}
+              >
+                {sending ? '...' : '전송'}
+              </button>
+            </div>
           </div>
         )}
       </div>

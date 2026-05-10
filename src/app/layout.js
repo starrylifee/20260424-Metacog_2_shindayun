@@ -34,7 +34,6 @@ export default function RootLayout({ children }) {
   return (
     <html lang="ko">
       <body>
-        <div className="bg-stars" />
         {children}
         <SiteFooter />
       </body>

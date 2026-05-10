@@ -95,24 +95,47 @@ def parse_lesson_lines(raw_cells: list[object]) -> tuple[list[str], bool]:
     return titles, continuation_only
 
 
-def detect_title_start(table: list[list[object]]) -> int:
+_TITLE_HEADERS = ('차시명', '주제')
+_UNIT_HEADER = '단원'
+
+
+def detect_table_columns(table: list[list[object]]) -> tuple[int, int, bool]:
+    """Return (unit_col, title_col, narrow).
+
+    narrow=True when the table uses a compact format with explicit '단원'/'주제'
+    headers (e.g. 5-column textbook lesson plan PDFs).  In narrow mode only the
+    single title cell is extracted per row.  narrow=False uses the wide format
+    where lesson cells may span from title_col to end-of-row.
+    """
     header_row = next(
-        (
-            row
-            for row in table[:3]
-            if any(normalize_text(cell) == '차시명' for cell in row)
-        ),
+        (row for row in table[:3] if any(normalize_text(c) in _TITLE_HEADERS for c in row)),
         None,
     )
     if header_row:
-        return next(idx for idx, cell in enumerate(header_row) if normalize_text(cell) == '차시명')
+        title_col = next(
+            idx for idx, c in enumerate(header_row) if normalize_text(c) in _TITLE_HEADERS
+        )
+        unit_col = next(
+            (idx for idx, c in enumerate(header_row) if normalize_text(c) == _UNIT_HEADER),
+            2,
+        )
+        narrow = title_col <= 3
+        return unit_col, title_col, narrow
 
+    # Fallback: wide format, width-based title detection
     first_width = len(table[0]) if table else 0
     if first_width >= 11:
-        return 10
-    if first_width >= 7:
-        return first_width - 1
-    return first_width
+        title_col = 10
+    elif first_width >= 7:
+        title_col = first_width - 1
+    else:
+        title_col = first_width
+    return 2, title_col, False
+
+
+def detect_title_start(table: list[list[object]]) -> int:
+    _, title_col, _ = detect_table_columns(table)
+    return title_col
 
 
 def parse_pdf_file(path: Path) -> tuple[str, str, OrderedDict[str, list[str]]]:
@@ -130,8 +153,8 @@ def parse_pdf_file(path: Path) -> tuple[str, str, OrderedDict[str, list[str]]]:
                 if not table:
                     continue
 
-                title_start = detect_title_start(table)
-                if title_start >= len(table[0]):
+                unit_col, title_col, narrow = detect_table_columns(table)
+                if title_col >= len(table[0]):
                     continue
 
                 for row in table:
@@ -139,15 +162,19 @@ def parse_pdf_file(path: Path) -> tuple[str, str, OrderedDict[str, list[str]]]:
                         continue
 
                     row_text = ' '.join(normalize_text(cell) for cell in row if normalize_text(cell))
-                    if '차시명' in row_text:
+                    if any(kw in row_text for kw in _TITLE_HEADERS):
                         continue
 
-                    unit_name = clean_unit_name(row[2] if len(row) > 2 else '')
+                    unit_name = clean_unit_name(row[unit_col] if len(row) > unit_col else '')
                     if unit_name:
                         current_unit = unit_name
                         units.setdefault(current_unit, [])
 
-                    title_cells = list(row[title_start:]) if len(row) > title_start else []
+                    if narrow:
+                        title_cells = [row[title_col]] if len(row) > title_col else []
+                    else:
+                        title_cells = list(row[title_col:]) if len(row) > title_col else []
+
                     titles, continuation_only = parse_lesson_lines(title_cells)
 
                     if not current_unit or not titles:
@@ -219,12 +246,14 @@ def merge_section(
 def build_dataset() -> dict[str, dict[str, dict[str, list[dict[str, list[str]]]]]]:
     grades: dict[str, dict[str, list[dict[str, list[str]]]]] = {}
 
-    for pdf_path in sorted(SOURCE_DIR.glob('*.pdf')):
-        grade, semester, units = parse_pdf_file(pdf_path)
-        merge_section(grades, grade, semester, units)
-
+    # XLSXs first; PDFs second so that a textbook-specific PDF overrides a
+    # generic spreadsheet when both cover the same grade/semester.
     for xlsx_path in sorted(SOURCE_DIR.glob('*.xlsx')):
         grade, semester, units = parse_xlsx_file(xlsx_path)
+        merge_section(grades, grade, semester, units)
+
+    for pdf_path in sorted(SOURCE_DIR.glob('*.pdf')):
+        grade, semester, units = parse_pdf_file(pdf_path)
         merge_section(grades, grade, semester, units)
 
     return {'grades': grades}
