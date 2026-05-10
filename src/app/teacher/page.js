@@ -15,6 +15,7 @@ export default function TeacherDashboard() {
   const [dataLoading, setDataLoading] = useState(false);
   const [hasSettings, setHasSettings] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [codeModal, setCodeModal] = useState(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
@@ -131,6 +132,48 @@ export default function TeacherDashboard() {
 
   return (
     <div className="page-container">
+      {codeModal && (
+        <div
+          onClick={() => setCodeModal(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000,
+            background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--bg-card)',
+              borderRadius: 'var(--radius-xl)',
+              padding: '2.5rem 3rem',
+              textAlign: 'center',
+              boxShadow: 'var(--shadow-md)',
+              minWidth: '18rem',
+            }}
+          >
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
+              {codeModal.title} — 입장 코드
+            </p>
+            <p style={{
+              fontSize: '4rem', fontWeight: 800, letterSpacing: '0.25em',
+              background: 'linear-gradient(135deg, var(--primary), var(--primary-bright))',
+              WebkitBackgroundClip: 'text', backgroundClip: 'text',
+              WebkitTextFillColor: 'transparent', color: 'transparent',
+              lineHeight: 1.1, marginBottom: '1.5rem',
+            }}>
+              {codeModal.entryCode}
+            </p>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setCodeModal(null)}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
+      )}
+
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
           <span className="emoji">🤖</span> 오늘배움봇
@@ -297,13 +340,22 @@ export default function TeacherDashboard() {
                       alignItems: 'center',
                     }}
                   >
-                    <span className="card-meta">
+                    <span className="card-meta" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       입장코드:{' '}
-                      <strong
-                        style={{ color: 'var(--cyan-primary)', letterSpacing: '0.1em' }}
-                      >
+                      <strong style={{ color: 'var(--cyan-primary)', letterSpacing: '0.1em' }}>
                         {assignment.entryCode}
                       </strong>
+                      <button
+                        onClick={(e) => { e.preventDefault(); setCodeModal(assignment); }}
+                        style={{
+                          fontSize: '0.75rem', padding: '0.15rem 0.5rem',
+                          borderRadius: '4px', border: '1px solid var(--primary)',
+                          background: 'transparent', color: 'var(--primary)',
+                          cursor: 'pointer', lineHeight: 1.5,
+                        }}
+                      >
+                        크게 보기
+                      </button>
                     </span>
                     <span className="card-meta">
                       👤 {assignment.participantCount ?? 0}명
