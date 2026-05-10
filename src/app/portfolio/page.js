@@ -5,10 +5,12 @@ import Link from 'next/link';
 
 import mathLessonPlanData from '@/data/mathLessonPlans.json';
 import socialLessonPlanData from '@/data/socialLessonPlans.json';
+import koreanLessonPlanData from '@/data/koreanLessonPlans.json';
 
 const SUBJECT_PLANS = {
   수학: mathLessonPlanData,
   사회: socialLessonPlanData,
+  국어: koreanLessonPlanData,
 };
 
 function parseGrade(gradeStr) {

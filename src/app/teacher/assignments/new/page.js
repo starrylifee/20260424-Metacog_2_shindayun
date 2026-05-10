@@ -7,6 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 import mathLessonPlanData from '@/data/mathLessonPlans.json';
 import socialLessonPlanData from '@/data/socialLessonPlans.json';
+import koreanLessonPlanData from '@/data/koreanLessonPlans.json';
 import { auth } from '@/lib/firebase';
 import { createAssignment, getTeacherSettings } from '@/lib/firestore';
 import {
@@ -30,6 +31,7 @@ const SUBJECTS = ['수학', '사회', '국어'];
 const LESSON_PLAN_DATA = {
   수학: mathLessonPlanData,
   사회: socialLessonPlanData,
+  국어: koreanLessonPlanData,
 };
 
 function isLessonTitle(lesson) {
@@ -156,9 +158,10 @@ export default function NewAssignment() {
   );
 
   // Derived: current lesson/unit depending on subject
-  const currentUnit = selectedSubject === '수학' ? selectedUnit : koreanUnit;
-  const currentLesson = selectedSubject === '수학' ? selectedLesson : koreanLesson;
-  const lessonSelected = selectedSubject === '수학'
+  const hasPlanData = Boolean(LESSON_PLAN_DATA[selectedSubject]);
+  const currentUnit = hasPlanData ? selectedUnit : koreanUnit;
+  const currentLesson = hasPlanData ? selectedLesson : koreanLesson;
+  const lessonSelected = hasPlanData
     ? Boolean(selectedLesson)
     : Boolean(koreanUnit.trim() && koreanLesson.trim());
 
@@ -451,8 +454,8 @@ export default function NewAssignment() {
               </div>
             )}
 
-            {/* 수학: 단원/차시 드롭다운 */}
-            {selectedSubject === '수학' && selectedSemester && (
+            {/* 수학·사회·국어: 단원/차시 드롭다운 */}
+            {hasPlanData && selectedSemester && (
               <>
                 <div className="form-group">
                   <label className="form-label">단원</label>
@@ -481,14 +484,14 @@ export default function NewAssignment() {
                         <option key={lesson} value={lesson}>{lesson}</option>
                       ))}
                     </select>
-                    <p className="form-hint">현재 3~6학년 수학 진도 자료 기반입니다.</p>
+                    <p className="form-hint">4~5학년 {selectedSubject} 진도 자료 기반입니다.</p>
                   </div>
                 )}
               </>
             )}
 
-            {/* 국어: 단원/차시 직접 입력 */}
-            {selectedSubject === '국어' && selectedSemester && (
+            {/* 진도 자료 없는 과목: 단원/차시 직접 입력 */}
+            {!hasPlanData && selectedSemester && (
               <>
                 <div className="form-group">
                   <label className="form-label">단원명</label>
@@ -523,7 +526,7 @@ export default function NewAssignment() {
                   border: '1px solid var(--border-color)',
                 }}
               >
-                <p style={{ fontSize: '0.8rem', color: 'var(--purple-light)', fontWeight: 600, marginBottom: '0.5rem' }}>
+                <p style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 600, marginBottom: '0.5rem' }}>
                   선택한 오늘 수업 범위
                 </p>
                 <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '0.35rem' }}>{gradeLabel}</p>
