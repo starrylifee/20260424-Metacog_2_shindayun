@@ -173,6 +173,34 @@ export default function AssignmentDetail() {
     }
   };
 
+  const handleGalleryToggle = async (conversation) => {
+    const newValue = !conversation.showInGallery;
+    setActionLoading(`gallery-${conversation.id}`);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/teacher/assignments/${id}/conversations`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ conversationId: conversation.id, showInGallery: newValue }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setConversations((prev) =>
+          prev.map((c) => c.id === conversation.id ? { ...c, showInGallery: newValue } : c)
+        );
+        if (selectedConv?.id === conversation.id) {
+          setSelectedConv((prev) => ({ ...prev, showInGallery: newValue }));
+        }
+      } else {
+        alert(data.error || '갤러리 설정에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Gallery toggle error:', error);
+      alert('갤러리 설정 중 오류가 발생했습니다.');
+    }
+    setActionLoading(null);
+  };
+
   const handleDeleteConversation = async (conversation) => {
     if (!canResetConversation(conversation)) {
       alert('Grownd 포인트가 이미 전송된 제출은 삭제할 수 없습니다.');
@@ -304,6 +332,15 @@ export default function AssignmentDetail() {
               {assignment.subject ? `${assignment.subject} · ` : ''}
               {assignment.grade ? `${assignment.grade} · ` : ''}
               입장코드: <strong style={{ color: 'var(--cyan-primary)', letterSpacing: '0.1em' }}>{assignment.entryCode}</strong>
+              <a
+                href={`/gallery/${assignment.entryCode}`}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-ghost btn-sm"
+                style={{ marginLeft: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}
+              >
+                🏆 갤러리 보기
+              </a>
             <button
               onClick={() => copyEntryCode(assignment.entryCode)}
               className="btn btn-ghost btn-sm"
@@ -486,6 +523,7 @@ export default function AssignmentDetail() {
                     <th>상태</th>
                     <th>점수</th>
                     <th>시작 시간</th>
+                    <th>🏆 갤러리</th>
                     <th>관리</th>
                   </tr>
                 </thead>
@@ -505,6 +543,18 @@ export default function AssignmentDetail() {
                         </td>
                         <td>{formatConversationScore(conversation.score)}</td>
                         <td className="card-meta">{formatDate(conversation.startedAt)}</td>
+                        <td>
+                          {conversation.status === 'completed' && (
+                            <button
+                              className={`btn btn-sm ${conversation.showInGallery ? 'btn-primary' : 'btn-ghost'}`}
+                              onClick={() => handleGalleryToggle(conversation)}
+                              disabled={actionLoading === `gallery-${conversation.id}`}
+                              title={conversation.showInGallery ? '갤러리에서 제거' : '갤러리에 추가'}
+                            >
+                              {actionLoading === `gallery-${conversation.id}` ? '...' : conversation.showInGallery ? '✓ 등록됨' : '+ 추가'}
+                            </button>
+                          )}
+                        </td>
                         <td>
                           <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
                             <button

@@ -344,6 +344,45 @@ function buildFallbackCompletion(assignment, partialReply = '') {
   };
 }
 
+async function performSecondaryScoreAdjustment(assignment, conversationMessages, originalScore) {
+  const studentMessages = conversationMessages
+    .filter((m) => m.role === 'user')
+    .map((m, i) => `학생 답변 ${i + 1}: ${String(m.content ?? '').trim()}`)
+    .join('\n');
+
+  if (!studentMessages) return { adjustment: 0, reason: '' };
+
+  try {
+    const reply = await createChatReply(
+      [
+        {
+          role: 'system',
+          content: `너는 학습 대화 품질 보정기다.
+학생의 대화 전체를 보고, 현재 1차 점수(${originalScore}점)가 적절한지 ±1점 범위에서 보정해라.
+
+보정 기준:
+- +1: 대화를 통해 학생 설명이 점진적으로 향상됐거나, 핵심 개념을 점점 더 명확하게 설명했다.
+- -1: 대화 내내 핵심을 회피하거나, 마지막 답변도 처음과 같이 얕고 부정확하다.
+- 0: 변화가 없거나 이미 최고/최저 점수라 보정이 불필요하다.
+
+반드시 JSON만 출력해: {"adjustment": 0, "reason": "보정 이유 1문장"}`,
+        },
+        { role: 'user', content: studentMessages },
+      ],
+      { temperature: 0, maxTokens: 120, responseFormat: { type: 'json_object' } }
+    );
+
+    const parsed = parseJsonResponse(reply);
+    if (!parsed || !Number.isFinite(Number(parsed.adjustment))) return { adjustment: 0, reason: '' };
+
+    const adjustment = Math.max(-1, Math.min(1, Math.round(Number(parsed.adjustment))));
+    const reason = typeof parsed.reason === 'string' ? parsed.reason.trim() : '';
+    return { adjustment, reason };
+  } catch {
+    return { adjustment: 0, reason: '' };
+  }
+}
+
 async function sendGrowndPoints(assignment, conversation, score) {
   if (!score || score <= 0) return;
 
@@ -526,10 +565,26 @@ export async function POST(request) {
       parsedReply = buildFallbackCompletion(assignment, parsedReply.reply);
     }
 
-    const { reply, finished, score, feedback, higherScoreTip, nextStepTip } = parsedReply;
+    const { reply, finished, feedback, higherScoreTip, nextStepTip } = parsedReply;
+    let { score } = parsedReply;
     const safeFeedback = typeof feedback === 'string' ? feedback : '';
     const safeHigherScoreTip = typeof higherScoreTip === 'string' ? higherScoreTip : '';
     const safeNextStepTip = typeof nextStepTip === 'string' ? nextStepTip : '';
+
+    let originalScore = score;
+    let scoreAdjustmentReason = '';
+    if (finished && Number.isFinite(score)) {
+      const { adjustment, reason } = await performSecondaryScoreAdjustment(
+        assignment, conversationMessages, score
+      );
+      if (adjustment !== 0) {
+        const scoreOptions = getAssignmentScoreOptions(assignment);
+        const adjusted = getClosestAllowedScore(scoreOptions, score + adjustment) ?? score;
+        originalScore = score;
+        score = adjusted;
+        scoreAdjustmentReason = reason;
+      }
+    }
 
     const updatedMessages = [
       ...existingMessages,
@@ -544,6 +599,8 @@ export async function POST(request) {
 
     if (finished) {
       updateData.score = score;
+      updateData.originalScore = originalScore;
+      updateData.scoreAdjustmentReason = scoreAdjustmentReason;
       updateData.feedback = safeFeedback;
       updateData.higherScoreTip = safeHigherScoreTip;
       updateData.nextStepTip = safeNextStepTip;

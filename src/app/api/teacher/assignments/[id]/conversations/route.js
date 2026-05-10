@@ -65,3 +65,32 @@ export async function GET(request, { params }) {
     return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
   }
 }
+
+export async function PATCH(request, { params }) {
+  try {
+    const teacher = await authenticateFirebaseRequest(request);
+    const assignmentId = await getAssignmentId(params);
+    await assertOwnedAssignment(assignmentId, teacher.uid);
+
+    const { conversationId, showInGallery } = await request.json();
+
+    if (!conversationId || typeof showInGallery !== 'boolean') {
+      return NextResponse.json({ success: false, error: '잘못된 요청입니다.' }, { status: 400 });
+    }
+
+    const convSnap = await adminDb.collection('conversations').doc(conversationId).get();
+    if (!convSnap.exists || convSnap.data()?.assignmentId !== assignmentId) {
+      return NextResponse.json({ success: false, error: '대화 기록을 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    await adminDb.collection('conversations').doc(conversationId).update({ showInGallery });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    if (error instanceof RequestError) {
+      return NextResponse.json({ success: false, error: error.message }, { status: error.status });
+    }
+    console.error('Conversation PATCH error:', error);
+    return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
+  }
+}

@@ -347,7 +347,8 @@ export default function ChatPage() {
                     <strong>💡 다음에 해보면 좋을 것</strong> {nextStepTip}
                   </div>
                 )}
-                <div style={{ marginTop: '1rem' }}>
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Link href={`/gallery/${code}`} className="btn btn-secondary btn-sm">🏆 명예의 전당</Link>
                   <Link href="/" className="btn btn-primary btn-sm">처음으로</Link>
                 </div>
               </div>

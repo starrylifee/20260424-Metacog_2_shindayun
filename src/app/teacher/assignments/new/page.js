@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 
 import mathLessonPlanData from '@/data/mathLessonPlans.json';
+import socialLessonPlanData from '@/data/socialLessonPlans.json';
 import { auth } from '@/lib/firebase';
 import { createAssignment, getTeacherSettings } from '@/lib/firestore';
 import {
@@ -24,7 +25,12 @@ import {
   SCORE_PRESETS,
 } from '@/lib/scoreConfig';
 
-const SUBJECTS = ['수학', '국어'];
+const SUBJECTS = ['수학', '사회', '국어'];
+
+const LESSON_PLAN_DATA = {
+  수학: mathLessonPlanData,
+  사회: socialLessonPlanData,
+};
 
 function isLessonTitle(lesson) {
   return typeof lesson === 'string' && lesson.trim() && !/^\d+(?:~\d+)?$/.test(lesson.trim());
@@ -111,16 +117,21 @@ export default function NewAssignment() {
     return () => unsubscribe();
   }, [router]);
 
-  const gradeOptions = useMemo(() => Object.keys(mathLessonPlanData.grades || {}), []);
+  const activePlanData = useMemo(
+    () => LESSON_PLAN_DATA[selectedSubject] || mathLessonPlanData,
+    [selectedSubject]
+  );
+
+  const gradeOptions = useMemo(() => Object.keys(activePlanData.grades || {}), [activePlanData]);
 
   const semesterOptions = useMemo(() => {
     if (!selectedGrade) return [];
-    return Object.keys(mathLessonPlanData.grades?.[selectedGrade] || {});
-  }, [selectedGrade]);
+    return Object.keys(activePlanData.grades?.[selectedGrade] || {});
+  }, [selectedGrade, activePlanData]);
 
   const mathUnits = useMemo(() => {
     if (!selectedGrade || !selectedSemester) return [];
-    const rawUnits = mathLessonPlanData.grades?.[selectedGrade]?.[selectedSemester] || [];
+    const rawUnits = activePlanData.grades?.[selectedGrade]?.[selectedSemester] || [];
     return rawUnits
       .map((unit) => ({
         ...unit,
@@ -153,6 +164,8 @@ export default function NewAssignment() {
 
   const handleSubjectChange = (subject) => {
     setSelectedSubject(subject);
+    setSelectedGrade('');
+    setSelectedSemester('');
     setSelectedUnit('');
     setSelectedLesson('');
     setKoreanUnit('');

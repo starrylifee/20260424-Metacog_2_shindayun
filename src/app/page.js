@@ -139,6 +139,16 @@ export default function HomePage() {
               >
                 {loading ? '확인 중...' : '🤖 오늘배움봇 만나러 가기'}
               </button>
+
+              {entryCode.length === 6 && (
+                <a
+                  href={`/gallery/${entryCode.toUpperCase()}`}
+                  className="btn btn-secondary btn-large"
+                  style={{ width: '100%', textAlign: 'center', display: 'block', marginTop: '0.5rem' }}
+                >
+                  🏆 명예의 전당 보기
+                </a>
+              )}
             </form>
           </div>
 
@@ -147,6 +157,12 @@ export default function HomePage() {
           <Link href="/teacher" className="btn btn-secondary" style={{ width: '100%' }}>
             👩‍🏫 교사 로그인
           </Link>
+
+          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+            <Link href="/portfolio" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textDecoration: 'underline' }}>
+              📚 내 학습 기록 보기
+            </Link>
+          </div>
         </div>
 
         {(topAnswersLoading || topAnswers.length > 0) && (
