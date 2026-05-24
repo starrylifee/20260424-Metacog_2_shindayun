@@ -202,6 +202,29 @@ export default function AssignmentDetail() {
     setActionLoading(null);
   };
 
+  const handleResendPoints = async (conversationId) => {
+    setActionLoading(`resend-${conversationId}`);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/conversations/${conversationId}/resend`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      if (data.success) {
+        alert(data.message || 'Grownd 포인트가 성공적으로 전송되었습니다!');
+        await loadData();
+      } else {
+        alert(data.error || '전송 실패: Grownd 설정을 다시 한번 확인해 주세요.');
+        await loadData();
+      }
+    } catch (error) {
+      console.error('Grownd resend error:', error);
+      alert('전송 중 오류가 발생했습니다.');
+    }
+    setActionLoading(null);
+  };
+
   const handleDeleteConversation = async (conversation) => {
     if (!canResetConversation(conversation)) {
       alert('Grownd 포인트가 이미 전송된 제출은 삭제할 수 없습니다.');
@@ -617,8 +640,28 @@ export default function AssignmentDetail() {
                 )}
 
                 {selectedConv.lastGrowndError?.message && !selectedConv.approved && (
-                  <div className="score-feedback" style={{ marginTop: '1rem' }}>
-                    <strong>Grownd 전송 실패</strong> {selectedConv.lastGrowndError.message}
+                  <div className="score-feedback" style={{
+                    marginTop: '1rem',
+                    borderColor: 'rgba(251, 113, 133, 0.3)',
+                    background: 'rgba(251, 113, 133, 0.05)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '0.75rem',
+                  }}>
+                    <div>
+                      <strong style={{ color: '#e11d48' }}>Grownd 전송 실패:</strong>{' '}
+                      <span style={{ color: 'var(--text-secondary)' }}>{selectedConv.lastGrowndError.message}</span>
+                    </div>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => handleResendPoints(selectedConv.id)}
+                      disabled={actionLoading === `resend-${selectedConv.id}`}
+                      style={{ fontSize: '0.8rem', padding: '0.35rem 0.8rem', fontWeight: 600 }}
+                    >
+                      {actionLoading === `resend-${selectedConv.id}` ? '전송 중...' : '🔄 재전송'}
+                    </button>
                   </div>
                 )}
               </div>
