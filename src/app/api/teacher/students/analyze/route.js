@@ -15,7 +15,7 @@ function getOpenAI() {
 export async function POST(request) {
   try {
     const teacher = await authenticateFirebaseRequest(request);
-    const { studentName, cutoffDate } = await request.json();
+    const { studentName, analysisMode, startDate, endDate, periodLabel } = await request.json();
 
     if (!studentName) {
       return NextResponse.json({ success: false, error: '학생 이름이 필요합니다.' }, { status: 400 });
@@ -58,12 +58,58 @@ export async function POST(request) {
 
     // 날짜 기준 필터
     let filtered = allConversations;
-    if (cutoffDate) {
-      const cutoff = new Date(cutoffDate + 'T23:59:59');
+
+    // 1. 대화 기록을 시간순으로 우선 정렬하여 첫 활동 시점 확인
+    const sortedConvs = [...allConversations].sort((a, b) => {
+      const aTime = a.startedAt ? new Date(a.startedAt).getTime() : 0;
+      const bTime = b.startedAt ? new Date(b.startedAt).getTime() : 0;
+      return aTime - bTime;
+    });
+
+    const firstConv = sortedConvs.find(c => c.startedAt);
+    const firstConvDate = firstConv ? new Date(firstConv.startedAt) : null;
+
+    if (analysisMode === 'relative-2w') {
+      if (!firstConvDate) {
+        return NextResponse.json({
+          success: false,
+          error: '대화 기록이 없어 초기 날짜를 측정할 수 없습니다.',
+        });
+      }
+      const endDateObj = new Date(firstConvDate.getTime() + 14 * 24 * 60 * 60 * 1000);
       filtered = allConversations.filter((conv) => {
-        const startedAt = conv.startedAt ? new Date(conv.startedAt) : null;
-        return startedAt && startedAt <= cutoff;
+        const d = conv.startedAt ? new Date(conv.startedAt) : null;
+        return d && d >= firstConvDate && d <= endDateObj;
       });
+    } else if (analysisMode === 'relative-1m') {
+      if (!firstConvDate) {
+        return NextResponse.json({
+          success: false,
+          error: '대화 기록이 없어 초기 날짜를 측정할 수 없습니다.',
+        });
+      }
+      const endDateObj = new Date(firstConvDate);
+      endDateObj.setMonth(endDateObj.getMonth() + 1);
+      filtered = allConversations.filter((conv) => {
+        const d = conv.startedAt ? new Date(conv.startedAt) : null;
+        return d && d >= firstConvDate && d <= endDateObj;
+      });
+    } else {
+      // 일반 날짜(monthly, custom, all) 필터링
+      if (startDate) {
+        const start = new Date(startDate + 'T00:00:00');
+        filtered = filtered.filter((conv) => {
+          const d = conv.startedAt ? new Date(conv.startedAt) : null;
+          return d && d >= start;
+        });
+      }
+      if (endDate) {
+        const end = new Date(endDate + 'T23:59:59');
+        filtered = filtered.filter((conv) => {
+          const d = conv.startedAt ? new Date(conv.startedAt) : null;
+          return d && d <= end;
+        });
+      }
     }
 
     // 시간순 정렬
@@ -76,8 +122,8 @@ export async function POST(request) {
     if (filtered.length === 0) {
       return NextResponse.json({
         success: false,
-        error: cutoffDate
-          ? `${cutoffDate}까지의 대화 기록이 없습니다.`
+        error: periodLabel
+          ? `[${periodLabel}] 기간 내의 대화 기록이 없습니다.`
           : '이 학생의 대화 기록이 없습니다.',
       });
     }
@@ -118,7 +164,7 @@ export async function POST(request) {
       })
       .join('\n');
 
-    const cutoffLabel = cutoffDate || '현재';
+    const cutoffLabel = periodLabel || '전체 기간';
 
     const systemPrompt = `당신은 초등학교 교사를 위한 학생 분석 AI 어시스턴트입니다.
 아래에 한 학생의 여러 과제에 걸친 대화 기록과 점수가 제공됩니다.
@@ -144,7 +190,7 @@ export async function POST(request) {
 - 한국어로 작성해 주세요.`;
 
     const userPrompt = `학생: ${studentName}
-분석 기준: ${cutoffLabel}까지의 기록
+분석 기준: ${cutoffLabel} 기록
 
 === 점수 추이 ===
 ${scoreSummary || '완료된 과제 없음'}
@@ -165,12 +211,17 @@ ${conversationSummaries.join('\n\n')}`;
 
     const report = completion.choices?.[0]?.message?.content?.trim() || '분석 결과를 생성하지 못했습니다.';
 
-    // Firestore에 리포트 저장
-    const reportId = `${teacher.uid}_${studentName}_${cutoffDate || 'all'}`;
+    // Firestore에 리포트 저장 (시작 및 끝 시점을 식별값에 포함하여 다중 시점의 리포트 공존 보장)
+    const startStr = startDate || 'all';
+    const endStr = endDate || 'all';
+    const reportId = `${teacher.uid}_${studentName}_${startStr}_${endStr}`;
     const reportData = {
       teacherId: teacher.uid,
       studentName,
-      cutoffDate: cutoffDate || null,
+      analysisMode: analysisMode || 'all',
+      startDate: startDate || null,
+      endDate: endDate || null,
+      periodLabel: cutoffLabel,
       report,
       conversationCount: filtered.length,
       completedCount: filtered.filter((c) => c.status === 'completed').length,
@@ -190,7 +241,7 @@ ${conversationSummaries.join('\n\n')}`;
       reportId,
       studentName,
       conversationCount: filtered.length,
-      cutoffDate: cutoffLabel,
+      periodLabel: cutoffLabel,
     });
   } catch (error) {
     if (error instanceof RequestError) {

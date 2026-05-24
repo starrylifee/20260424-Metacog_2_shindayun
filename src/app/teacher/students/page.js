@@ -26,8 +26,43 @@ export default function TeacherStudents() {
   const [reportsLoading, setReportsLoading] = useState(false);
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, currentName: '' });
-  const [bulkDate, setBulkDate] = useState('');
   const [viewingReport, setViewingReport] = useState(null);
+
+  // 일괄 분석 설정 관련 상태
+  const [analysisMode, setAnalysisMode] = useState('all');
+  const [selectedMonth, setSelectedMonth] = useState('3');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+
+  const getResolvedPeriod = (mode, month, customStart, customEnd) => {
+    let start = null;
+    let end = null;
+    let label = '전체 기간';
+
+    if (mode === 'relative-2w') {
+      start = 'relative-2w';
+      end = 'relative-2w';
+      label = '초기 2주간';
+    } else if (mode === 'relative-1m') {
+      start = 'relative-1m';
+      end = 'relative-1m';
+      label = '초기 1개월간';
+    } else if (mode === 'monthly') {
+      const m = parseInt(month, 10);
+      const year = 2026;
+      const endObj = new Date(year, m, 0);
+      const pad = (n) => String(n).padStart(2, '0');
+      start = `${year}-${pad(m)}-01`;
+      end = `${year}-${pad(m)}-${pad(endObj.getDate())}`;
+      label = `${m}월 단일`;
+    } else if (mode === 'custom') {
+      start = customStart || null;
+      end = customEnd || null;
+      label = `${customStart || '시작일 지정 없음'} ~ ${customEnd || '종료일 지정 없음'}`;
+    }
+
+    return { start, end, label };
+  };
 
   const studentReports = useMemo(() => {
     if (!selectedStudent) return [];
@@ -198,16 +233,23 @@ export default function TeacherStudents() {
       return;
     }
 
-    const targetDateLabel = bulkDate ? `${bulkDate} 시점` : '전체 기간';
-    const existingReport = reports.find((r) => r.cutoffDate === (bulkDate || null));
+    const { start: resolvedStart, end: resolvedEnd, label: periodLabel } = getResolvedPeriod(
+      analysisMode,
+      selectedMonth,
+      customStartDate,
+      customEndDate
+    );
+
+    // 중복 검사: 시작/끝 경계 조건이 기존 보관함에 동일하게 존재하는지 검출
+    const existingReport = reports.find(
+      (r) => r.startDate === resolvedStart && r.endDate === resolvedEnd
+    );
     if (existingReport) {
-      alert(`${targetDateLabel} 보고서는 이미 생성되었습니다.`);
+      alert(`[${periodLabel}] 보고서는 이미 생성되었습니다.`);
       return;
     }
 
-    const confirmMsg = bulkDate 
-      ? `기준일(${bulkDate})까지 대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 모두 일괄 AI 분석하시겠습니까?`
-      : `대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 전체 기간 기준으로 일괄 AI 분석하시겠습니까?`;
+    const confirmMsg = `[${periodLabel}] 구간의 대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 일괄 AI 분석하시겠습니까?`;
 
     if (!confirm(confirmMsg)) {
       return;
@@ -234,7 +276,10 @@ export default function TeacherStudents() {
             },
             body: JSON.stringify({
               studentName: student.name,
-              cutoffDate: bulkDate || null,
+              analysisMode,
+              startDate: resolvedStart,
+              endDate: resolvedEnd,
+              periodLabel,
             }),
           });
           const data = await res.json();
@@ -405,54 +450,121 @@ export default function TeacherStudents() {
                   </div>
                   
                   {/* 일괄 제어판 */}
-                  <div className="card-glass" style={{ padding: '1.25rem', marginBottom: '1.5rem', border: '1px solid rgba(2, 74, 218, 0.15)' }}>
-                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text)' }}>
+                  <div className="card-glass" style={{ padding: '1.5rem', marginBottom: '1.5rem', border: '1px solid rgba(2, 74, 218, 0.15)' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       🧠 AI 일괄 분석 설정
                     </h3>
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>기준 시점:</span>
-                        <input
-                          type="date"
-                          className="form-input"
-                          value={bulkDate}
-                          onChange={(e) => setBulkDate(e.target.value)}
-                          style={{ maxWidth: '160px', padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
-                        />
+                    
+                    {/* 분석 방식 선택 */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginRight: '0.5rem' }}>분석 방식:</span>
+                        {[
+                          { id: 'all', label: '전체 기간' },
+                          { id: 'relative-2w', label: '초기 2주간' },
+                          { id: 'relative-1m', label: '초기 1개월간' },
+                          { id: 'monthly', label: '특정 월 단일 분석' },
+                          { id: 'custom', label: '직접 기간 설정' },
+                        ].map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            className={`btn btn-sm ${analysisMode === mode.id ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setAnalysisMode(mode.id)}
+                            style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                          >
+                            {mode.label}
+                          </button>
+                        ))}
                       </div>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setBulkDate('')}
-                        style={{ fontSize: '0.8rem' }}
-                      >
-                        전체 기간
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setBulkDate(getDatePreset(7))}
-                        style={{ fontSize: '0.8rem' }}
-                      >
-                        최근 1주
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-ghost"
-                        onClick={() => setBulkDate(getDatePreset(30))}
-                        style={{ fontSize: '0.8rem' }}
-                      >
-                        최근 1개월
-                      </button>
-                      
-                      <button
-                        className="btn btn-primary"
-                        onClick={handleBulkAnalyze}
-                        disabled={bulkLoading}
-                        style={{ marginLeft: 'auto', padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
-                      >
-                        {bulkLoading ? '일괄 분석 중...' : <><BotAvatar size={16} /> 전체 학생 AI 일괄 분석 실행</>}
-                      </button>
+
+                      {/* 분석 방식 세부 조건 */}
+                      {analysisMode === 'monthly' && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem',
+                          background: 'rgba(2, 74, 218, 0.03)',
+                          padding: '0.75rem 1rem',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid rgba(2, 74, 218, 0.08)',
+                        }}>
+                          <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>대상 월 선택:</span>
+                          <select
+                            className="form-input"
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            style={{ maxWidth: '120px', padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
+                          >
+                            {[3, 4, 5, 6, 7].map((m) => (
+                              <option key={m} value={m}>{m}월</option>
+                            ))}
+                          </select>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            * 해당 월에 진행된 대화 기록만 모아서 독립적인 보고서를 작성합니다. (비누적)
+                          </span>
+                        </div>
+                      )}
+
+                      {analysisMode === 'custom' && (
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.75rem',
+                          background: 'rgba(2, 74, 218, 0.03)',
+                          padding: '0.75rem 1rem',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid rgba(2, 74, 218, 0.08)',
+                          flexWrap: 'wrap',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>시작일:</span>
+                            <input
+                              type="date"
+                              className="form-input"
+                              value={customStartDate}
+                              onChange={(e) => setCustomStartDate(e.target.value)}
+                              style={{ maxWidth: '140px', padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>종료일:</span>
+                            <input
+                              type="date"
+                              className="form-input"
+                              value={customEndDate}
+                              onChange={(e) => setCustomEndDate(e.target.value)}
+                              style={{ maxWidth: '140px', padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
+                            />
+                          </div>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            * 시작일과 종료일을 지정하여 해당 기간에 진행된 대화만 분석합니다.
+                          </span>
+                        </div>
+                      )}
+
+                      {analysisMode === 'relative-2w' && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'rgba(168, 85, 247, 0.03)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(168, 85, 247, 0.1)' }}>
+                          💡 <strong>학생별 첫 활동 시작일로부터 2주간</strong>의 대화 기록을 필터링하여 보고서를 작성합니다. 학생마다 활동 시작일이 달라도 자동으로 맞춤 분석합니다.
+                        </div>
+                      )}
+
+                      {analysisMode === 'relative-1m' && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', background: 'rgba(168, 85, 247, 0.03)', padding: '0.5rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid rgba(168, 85, 247, 0.1)' }}>
+                          💡 <strong>학생별 첫 활동 시작일로부터 1개월간</strong>의 대화 기록을 필터링하여 보고서를 작성합니다. 학생마다 활동 시작일이 달라도 자동으로 맞춤 분석합니다.
+                        </div>
+                      )}
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+                        <button
+                          className="btn btn-primary"
+                          onClick={handleBulkAnalyze}
+                          disabled={bulkLoading}
+                          style={{ padding: '0.5rem 1.2rem', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.35rem', fontWeight: 600 }}
+                        >
+                          {bulkLoading ? '일괄 분석 중...' : <><BotAvatar size={16} /> 전체 학생 AI 일괄 분석 실행</>}
+                        </button>
+                      </div>
                     </div>
                   </div>
 
