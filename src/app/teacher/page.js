@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
 
+import BotAvatar from '@/components/BotAvatar';
 import { formatStudentMessageByteRange, normalizeAssignmentConstraints } from '@/lib/chatConstraints';
 import { auth, googleProvider } from '@/lib/firebase';
 import { getAssignmentsByTeacher, getTeacherSettings } from '@/lib/firestore';
@@ -103,27 +104,180 @@ export default function TeacherDashboard() {
 
   if (!user) {
     return (
-      <div className="page-container">
-        <div className="entry-container">
-          <div className="entry-card">
-            <div className="bot-avatar bot-avatar-large">👩‍🏫</div>
-            <h1 className="heading-hero">
-              <span className="heading-gradient">교사 로그인</span>
+      <div className="page-container" style={{ background: 'var(--text)', minHeight: '100vh' }}>
+        {/* 배경 장식 */}
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '100%',
+          overflow: 'hidden',
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '-20%',
+            right: '-10%',
+            width: '600px',
+            height: '600px',
+            background: 'radial-gradient(circle, rgba(2, 74, 216, 0.15) 0%, transparent 70%)',
+            borderRadius: '50%',
+          }} />
+          <div style={{
+            position: 'absolute',
+            bottom: '-10%',
+            left: '-5%',
+            width: '400px',
+            height: '400px',
+            background: 'radial-gradient(circle, rgba(41, 110, 249, 0.1) 0%, transparent 70%)',
+            borderRadius: '50%',
+          }} />
+        </div>
+
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          padding: '2rem',
+        }}>
+          {/* 로고 + 히어로 */}
+          <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              margin: '0 auto 1.5rem',
+              background: 'linear-gradient(135deg, var(--primary), var(--primary-bright))',
+              borderRadius: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 8px 32px rgba(2, 74, 216, 0.4)',
+            }}>
+              <BotAvatar size={48} />
+            </div>
+            <h1 style={{
+              fontSize: '2.5rem',
+              fontWeight: 500,
+              color: '#ffffff',
+              marginBottom: '0.75rem',
+              lineHeight: 1.1,
+            }}>
+              오늘배움봇
             </h1>
-            <p className="subtitle">Google 계정으로 교사 대시보드에 접속하세요.</p>
+            <p style={{
+              fontSize: '1.1rem',
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontWeight: 400,
+              marginBottom: '0.25rem',
+            }}>
+              교사 대시보드
+            </p>
+          </div>
+
+          {/* 로그인 카드 */}
+          <div style={{
+            width: '100%',
+            maxWidth: '380px',
+            background: 'rgba(255, 255, 255, 0.06)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: '16px',
+            padding: '2rem',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+          }}>
+            <p style={{
+              fontSize: '0.95rem',
+              color: 'rgba(255, 255, 255, 0.7)',
+              textAlign: 'center',
+              marginBottom: '1.5rem',
+              lineHeight: 1.5,
+            }}>
+              Google 계정으로 로그인하여<br />과제 관리와 학생 분석을 시작하세요.
+            </p>
 
             <button
               id="btn-google-login"
-              className="btn btn-primary btn-large"
               onClick={handleLogin}
-              style={{ width: '100%', marginBottom: '1rem' }}
+              style={{
+                width: '100%',
+                padding: '14px 24px',
+                height: '52px',
+                background: '#ffffff',
+                color: 'var(--text)',
+                border: 'none',
+                borderRadius: '4px',
+                fontFamily: 'inherit',
+                fontSize: '15px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.6rem',
+                marginBottom: '1rem',
+                transition: 'transform 0.1s ease, box-shadow 0.15s ease',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.transform = 'scale(1.01)'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
             >
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+                <path d="M3.964 10.706A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.706V4.962H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.038l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.962L3.964 7.294C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
               Google로 로그인
             </button>
 
-            <Link href="/" className="btn btn-ghost" style={{ width: '100%' }}>
-              학생 화면으로
+            <Link
+              href="/"
+              style={{
+                display: 'block',
+                textAlign: 'center',
+                color: 'rgba(255, 255, 255, 0.45)',
+                fontSize: '0.85rem',
+                textDecoration: 'none',
+                padding: '0.5rem',
+              }}
+            >
+              ← 학생 화면으로
             </Link>
+          </div>
+
+          {/* 기능 하이라이트 */}
+          <div style={{
+            display: 'flex',
+            gap: '1.5rem',
+            marginTop: '3rem',
+            maxWidth: '600px',
+            width: '100%',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+          }}>
+            {[
+              { icon: '📝', label: '과제 관리', desc: '차시별 과제 생성·복사' },
+              { icon: '📊', label: '실시간 결과', desc: '학생 점수·대화 확인' },
+              { icon: '🧠', label: 'AI 학생 분석', desc: '성장 패턴 리포트' },
+            ].map((item) => (
+              <div key={item.label} style={{
+                flex: '1 1 150px',
+                textAlign: 'center',
+                padding: '1rem',
+              }}>
+                <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>{item.icon}</div>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'rgba(255, 255, 255, 0.8)', marginBottom: '0.25rem' }}>
+                  {item.label}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.4)' }}>
+                  {item.desc}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -176,9 +330,12 @@ export default function TeacherDashboard() {
 
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
-          <span className="emoji">🤖</span> 오늘배움봇
+          <BotAvatar size={22} /> 오늘배움봇
         </Link>
         <div className="navbar-actions">
+          <Link href="/teacher/students" className="btn btn-ghost btn-sm">
+            학생별 답변
+          </Link>
           <Link href="/teacher/settings" className="btn btn-ghost btn-sm">
             설정
           </Link>
@@ -242,6 +399,9 @@ export default function TeacherDashboard() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <Link href="/teacher/students" className="btn btn-secondary">
+              👩‍🎓 학생별 답변 모음
+            </Link>
             <Link href="/teacher/assignments/new" className="btn btn-primary">
               ➕ 새 과제
             </Link>

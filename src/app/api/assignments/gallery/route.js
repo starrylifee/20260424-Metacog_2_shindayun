@@ -34,16 +34,21 @@ export async function GET(request) {
     const maxScore = scoreOptions.length > 0 ? Math.max(...scoreOptions) : null;
 
     // 교사가 직접 선정한 갤러리 항목 우선 조회
-    const curatedSnap = await adminDb
-      .collection('conversations')
-      .where('assignmentId', '==', assignmentId)
-      .where('status', '==', 'completed')
-      .where('showInGallery', '==', true)
-      .orderBy('score', 'desc')
-      .limit(10)
-      .get();
-
-    let galleryDocs = curatedSnap.docs;
+    let galleryDocs = [];
+    try {
+      const curatedSnap = await adminDb
+        .collection('conversations')
+        .where('assignmentId', '==', assignmentId)
+        .where('status', '==', 'completed')
+        .where('showInGallery', '==', true)
+        .orderBy('score', 'desc')
+        .limit(10)
+        .get();
+      galleryDocs = curatedSnap.docs;
+    } catch (curatedError) {
+      // showInGallery 복합 인덱스가 없으면 무시하고 자동 선택으로 진행
+      console.warn('Gallery curated query failed (index may not exist):', curatedError?.message);
+    }
 
     // 선정 항목 없으면 점수 상위 자동 선택
     if (galleryDocs.length === 0) {

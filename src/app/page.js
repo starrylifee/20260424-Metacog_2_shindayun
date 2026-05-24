@@ -138,7 +138,7 @@ export default function HomePage() {
                 disabled={loading}
                 style={{ width: '100%' }}
               >
-                {loading ? '확인 중...' : '🤖 오늘배움봇 만나러 가기'}
+                {loading ? '확인 중...' : <><BotAvatar size={18} /> 오늘배움봇 만나러 가기</>}
               </button>
 
               {entryCode.length === 6 && (

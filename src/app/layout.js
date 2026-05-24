@@ -1,7 +1,7 @@
 import './globals.css';
 import SiteFooter from '@/components/SiteFooter';
 
-const TITLE = '오늘배움봇 🤖 | 배운 걸 설명하며 성장하기';
+const TITLE = '오늘배움봇 | 배운 걸 설명하며 성장하기';
 const DESCRIPTION = '오늘배움봇에게 오늘 배운 것을 설명해보세요! AI가 여러분의 이해도를 확인해줍니다.';
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||

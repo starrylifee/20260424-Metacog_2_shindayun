@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { auth } from '@/lib/firebase';
+import BotAvatar from '@/components/BotAvatar';
 import { onAuthStateChanged } from 'firebase/auth';
 import { getChatLengthExamples, getTeacherConstraintDefaults } from '@/lib/chatConstraints';
 import { getTeacherSettings, saveTeacherSettings } from '@/lib/firestore';
@@ -121,7 +122,7 @@ export default function TeacherSettings() {
     <div className="page-container">
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
-          <span className="emoji">🤖</span> 오늘배움봇
+          <BotAvatar size={22} /> 오늘배움봇
         </Link>
         <Link href="/teacher" className="btn btn-ghost btn-sm">← 대시보드</Link>
       </nav>

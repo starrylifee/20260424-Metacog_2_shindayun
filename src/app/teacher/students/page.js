@@ -1,0 +1,1004 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { onAuthStateChanged } from 'firebase/auth';
+
+import { auth } from '@/lib/firebase';
+import BotAvatar from '@/components/BotAvatar';
+
+export default function TeacherStudents() {
+  const router = useRouter();
+  const [user, setUser] = useState(null);
+  const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [convLoading, setConvLoading] = useState(false);
+  const [expandedConvIds, setExpandedConvIds] = useState(new Set());
+
+  // AI 분석 관련 상태
+  const [analysisDate, setAnalysisDate] = useState('');
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisReport, setAnalysisReport] = useState(null);
+
+  // 일괄 분석 & 보관함 관련 상태
+  const [reports, setReports] = useState([]);
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, currentName: '' });
+  const [bulkDate, setBulkDate] = useState('');
+  const [viewingReport, setViewingReport] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      if (!nextUser) {
+        router.push('/teacher');
+        return;
+      }
+      setUser(nextUser);
+    });
+    return () => unsubscribe();
+  }, [router]);
+
+  const loadReports = async (currentUser) => {
+    if (!currentUser) return;
+    setReportsLoading(true);
+    try {
+      const token = await currentUser.getIdToken();
+      const res = await fetch('/api/teacher/students/reports', {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReports(data.reports || []);
+      }
+    } catch (error) {
+      console.error('Failed to load reports:', error);
+    }
+    setReportsLoading(false);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+
+    async function loadInitialData() {
+      setLoading(true);
+      try {
+        const token = await user.getIdToken();
+        const res = await fetch('/api/teacher/students', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+        const data = await res.json();
+        if (data.success) {
+          setStudents(data.students || []);
+        }
+        await loadReports(user);
+      } catch (error) {
+        console.error('Failed to load students:', error);
+      }
+      setLoading(false);
+    }
+
+    void loadInitialData();
+  }, [user]);
+
+  const handleSelectStudent = async (student) => {
+    setSelectedStudent(student);
+    setConversations([]);
+    setExpandedConvIds(new Set());
+    
+    // 저장된 리포트 캐시가 있으면 가져옴
+    const existing = reports.find(
+      (r) => r.studentName === student.name && r.cutoffDate === (analysisDate || null)
+    );
+    if (existing) {
+      setAnalysisReport({
+        content: existing.report,
+        generatedAt: new Date(existing.generatedAt).toLocaleString('ko-KR'),
+        cutoffDate: existing.cutoffDate || '전체',
+      });
+    } else {
+      setAnalysisReport(null);
+    }
+
+    setConvLoading(true);
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(
+        `/api/teacher/students?student=${encodeURIComponent(student.name)}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        }
+      );
+      const data = await res.json();
+      if (data.success) {
+        setConversations(data.conversations || []);
+      }
+    } catch (error) {
+      console.error('Failed to load student conversations:', error);
+    }
+
+    setConvLoading(false);
+  };
+
+  const toggleConv = (convId) => {
+    setExpandedConvIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(convId)) {
+        next.delete(convId);
+      } else {
+        next.add(convId);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllConvs = () => {
+    if (expandedConvIds.size === conversations.length) {
+      setExpandedConvIds(new Set());
+    } else {
+      setExpandedConvIds(new Set(conversations.map((c) => c.id)));
+    }
+  };
+
+  // 날짜 기준 필터링된 대화
+  const filteredConversations = useMemo(() => {
+    if (!analysisDate) return conversations;
+    const cutoff = new Date(analysisDate + 'T23:59:59');
+    return conversations.filter((conv) => {
+      const startedAt = conv.startedAt ? new Date(conv.startedAt) : null;
+      return startedAt && startedAt <= cutoff;
+    });
+  }, [conversations, analysisDate]);
+
+  // 점수 추이 계산
+  const scoreTrend = useMemo(() => {
+    const completed = filteredConversations
+      .filter((c) => c.status === 'completed' && Number.isFinite(c.score))
+      .sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+    return completed.map((c) => ({
+      title: c.assignment?.title || '(과제)',
+      score: c.score,
+      maxScore: c.assignment?.scoreOptions
+        ? Math.max(...c.assignment.scoreOptions)
+        : null,
+      date: c.startedAt,
+    }));
+  }, [filteredConversations]);
+
+  // 기준일 변경 시 캐시 보고서 자동 매칭
+  const handleDateChange = (newDate) => {
+    setAnalysisDate(newDate);
+    if (!selectedStudent) return;
+    const existing = reports.find(
+      (r) => r.studentName === selectedStudent.name && r.cutoffDate === (newDate || null)
+    );
+    if (existing) {
+      setAnalysisReport({
+        content: existing.report,
+        generatedAt: new Date(existing.generatedAt).toLocaleString('ko-KR'),
+        cutoffDate: existing.cutoffDate || '전체',
+      });
+    } else {
+      setAnalysisReport(null);
+    }
+  };
+
+  // AI 분석 요청
+  const handleAnalyze = async () => {
+    if (!selectedStudent || filteredConversations.length === 0) return;
+
+    setAnalysisLoading(true);
+    setAnalysisReport(null);
+
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/teacher/students/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          studentName: selectedStudent.name,
+          cutoffDate: analysisDate || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAnalysisReport({
+          content: data.report,
+          generatedAt: new Date().toLocaleString('ko-KR'),
+          cutoffDate: analysisDate || '현재',
+        });
+        await loadReports(user);
+      } else {
+        alert(data.error || 'AI 분석에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('AI analysis error:', error);
+      alert('AI 분석 중 오류가 발생했습니다.');
+    }
+
+    setAnalysisLoading(false);
+  };
+
+  // 일괄 AI 분석 요청
+  const handleBulkAnalyze = async () => {
+    const studentsToAnalyze = students.filter((s) => s.conversationCount > 0);
+    if (studentsToAnalyze.length === 0) {
+      alert('분석할 대화 기록이 있는 학생이 없습니다.');
+      return;
+    }
+
+    const confirmMsg = bulkDate 
+      ? `기준일(${bulkDate})까지 대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 모두 일괄 AI 분석하시겠습니까?\n이미 생성된 리포트가 있으면 덮어씌워집니다.`
+      : `대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 전체 기간 기준으로 일괄 AI 분석하시겠습니까?\n이미 생성된 리포트가 있으면 덮어씌워집니다.`;
+
+    if (!confirm(confirmMsg)) {
+      return;
+    }
+
+    setBulkLoading(true);
+    setBulkProgress({ current: 0, total: studentsToAnalyze.length, currentName: '' });
+
+    try {
+      const token = await user.getIdToken();
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < studentsToAnalyze.length; i++) {
+        const student = studentsToAnalyze[i];
+        setBulkProgress({ current: i, total: studentsToAnalyze.length, currentName: student.name });
+
+        try {
+          const res = await fetch('/api/teacher/students/analyze', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              studentName: student.name,
+              cutoffDate: bulkDate || null,
+            }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            successCount++;
+          } else {
+            failCount++;
+            console.error(`Failed to analyze ${student.name}:`, data.error);
+          }
+        } catch (err) {
+          failCount++;
+          console.error(`Error analyzing ${student.name}:`, err);
+        }
+      }
+
+      setBulkProgress({ current: studentsToAnalyze.length, total: studentsToAnalyze.length, currentName: '완료!' });
+      alert(`일괄 AI 분석 완료!\n성공: ${successCount}명 / 실패: ${failCount}명`);
+      await loadReports(user);
+    } catch (error) {
+      console.error('Bulk analysis failed:', error);
+      alert('일괄 분석 처리 중 오류가 발생했습니다.');
+    }
+
+    setBulkLoading(false);
+  };
+
+  // 빠른 날짜 프리셋
+  const getDatePreset = (daysAgo) => {
+    const date = new Date();
+    date.setDate(date.getDate() - daysAgo);
+    return date.toISOString().split('T')[0];
+  };
+
+  const formatDate = (value) => {
+    if (!value) return '-';
+    const date = value.toDate ? value.toDate() : new Date(value);
+    return date.toLocaleDateString('ko-KR', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatShortDate = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+  };
+
+  const getStatusBadge = (conv) => {
+    if (conv.status === 'completed') {
+      return { text: '완료', className: 'badge-active' };
+    }
+    return { text: '진행 중', className: 'badge-inactive' };
+  };
+
+  if (!user) return null;
+
+  return (
+    <div className="page-container">
+      <nav className="navbar">
+        <Link href="/teacher" className="navbar-brand">
+          <BotAvatar size={22} /> 오늘배움봇
+        </Link>
+        <Link href="/teacher" className="btn btn-ghost btn-sm">← 대시보드</Link>
+      </nav>
+
+      <div className="content-wrapper">
+        <div style={{ marginBottom: '2rem' }}>
+          <h1 className="heading-section">👩‍🎓 학생별 답변 모음</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            학생을 선택하면 모든 과제에 걸친 대화 기록을 한눈에 볼 수 있습니다.
+          </p>
+        </div>
+
+        {loading ? (
+          <div className="loading-container" style={{ minHeight: '30vh' }}>
+            <div className="loading-spinner" />
+          </div>
+        ) : students.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-emoji">📋</div>
+            <p className="empty-state-text">아직 참여한 학생이 없습니다.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+              과제를 만들고 학생들이 참여하면 여기에 나타납니다.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: '1.5rem', minHeight: 'calc(100vh - 200px)' }}>
+            {/* 학생 목록 사이드바 */}
+            <div style={{
+              width: '260px',
+              minWidth: '220px',
+              flexShrink: 0,
+              borderRight: '1px solid var(--border-color)',
+              paddingRight: '1rem',
+              overflowY: 'auto',
+            }}>
+              <p style={{
+                fontSize: '0.8rem',
+                color: 'var(--text-muted)',
+                fontWeight: 600,
+                marginBottom: '0.75rem',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}>
+                전체 학생 ({students.length}명)
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                {students.map((student) => {
+                  const isSelected = selectedStudent?.name === student.name;
+                  return (
+                    <button
+                      key={`${student.name}-${student.studentCode}`}
+                      onClick={() => handleSelectStudent(student)}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '0.65rem 0.85rem',
+                        borderRadius: 'var(--radius-md)',
+                        border: 'none',
+                        background: isSelected ? 'rgba(0, 102, 204, 0.1)' : 'transparent',
+                        borderLeft: isSelected ? '3px solid var(--primary)' : '3px solid transparent',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                        color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}>
+                        <span style={{
+                          fontWeight: isSelected ? 700 : 500,
+                          fontSize: '0.9rem',
+                        }}>
+                          {student.name}
+                        </span>
+                        <span style={{
+                          fontSize: '0.75rem',
+                          color: 'var(--text-muted)',
+                        }}>
+                          {student.completedCount}/{student.conversationCount}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* 대화 기록 메인 영역 */}
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {!selectedStudent ? (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        📊 AI 학생 분석 리포트 보관함
+                      </h2>
+                      <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.25rem' }}>
+                        학생들의 전체 과제 참여 기록을 바탕으로 생성된 AI 리포트를 보관하고 일괄 관리합니다.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* 일괄 제어판 */}
+                  <div className="card-glass" style={{ padding: '1.25rem', marginBottom: '1.5rem', border: '1px solid rgba(2, 74, 218, 0.15)' }}>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--text)' }}>
+                      🧠 AI 일괄 분석 설정
+                    </h3>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>기준 시점:</span>
+                        <input
+                          type="date"
+                          className="form-input"
+                          value={bulkDate}
+                          onChange={(e) => setBulkDate(e.target.value)}
+                          style={{ maxWidth: '160px', padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setBulkDate('')}
+                        style={{ fontSize: '0.8rem' }}
+                      >
+                        전체 기간
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setBulkDate(getDatePreset(7))}
+                        style={{ fontSize: '0.8rem' }}
+                      >
+                        최근 1주
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => setBulkDate(getDatePreset(30))}
+                        style={{ fontSize: '0.8rem' }}
+                      >
+                        최근 1개월
+                      </button>
+                      
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleBulkAnalyze}
+                        disabled={bulkLoading}
+                        style={{ marginLeft: 'auto', padding: '0.5rem 1rem', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      >
+                        {bulkLoading ? '일괄 분석 중...' : <><BotAvatar size={16} /> 전체 학생 AI 일괄 분석 실행</>}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 일괄 분석 진행 중 상태 */}
+                  {bulkLoading && (
+                    <div className="card-glass" style={{
+                      padding: '1.25rem',
+                      marginBottom: '1.5rem',
+                      border: '1px solid var(--primary)',
+                      boxShadow: 'var(--shadow-primary)',
+                      background: 'rgba(2, 74, 218, 0.02)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <h4 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <span className="loading-spinner" style={{ width: '14px', height: '14px', border: '2px solid var(--primary)', borderTopColor: 'transparent', display: 'inline-block' }} /> 
+                          전체 학생 일괄 AI 분석 보고서 생성 중...
+                        </h4>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--primary)' }}>
+                          {bulkProgress.current} / {bulkProgress.total} 명 완료
+                        </span>
+                      </div>
+                      <div style={{
+                        width: '100%',
+                        height: '6px',
+                        background: 'var(--border)',
+                        borderRadius: '3px',
+                        overflow: 'hidden',
+                        marginBottom: '0.5rem'
+                      }}>
+                        <div style={{
+                          width: `${(bulkProgress.current / bulkProgress.total) * 100}%`,
+                          height: '100%',
+                          background: 'linear-gradient(to right, var(--primary), var(--primary-bright))',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        현재 진행: {bulkProgress.currentName ? <strong>'{bulkProgress.currentName}' 학생 분석 중</strong> : '분석 준비 중...'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 보관함 목록 */}
+                  <div className="card" style={{ padding: '1.5rem' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text)' }}>
+                      📁 보관된 AI 분석 리포트 목록 ({reports.length}건)
+                    </h3>
+                    
+                    {reportsLoading ? (
+                      <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
+                        <div className="loading-spinner" />
+                      </div>
+                    ) : reports.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📁</div>
+                        <p style={{ fontSize: '0.9rem' }}>아직 보관된 AI 분석 리포트가 없습니다.</p>
+                        <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                          상단 버튼을 눌러 전체 학생 일괄 분석을 실행해 보세요.
+                        </p>
+                      </div>
+                    ) : (
+                      <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>학생 이름</th>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>기준 구분</th>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>참여 대화</th>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>완료된 대화</th>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>평균 점수</th>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>생성 일시</th>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600, textAlign: 'right' }}>관리</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {reports.map((reportItem) => (
+                              <tr key={reportItem.id} style={{ borderBottom: '1px solid var(--border)', verticalAlign: 'middle' }}>
+                                <td style={{ padding: '0.85rem 0.5rem', fontWeight: 600 }}>{reportItem.studentName}</td>
+                                <td style={{ padding: '0.85rem 0.5rem' }}>
+                                  <span className={`badge ${reportItem.cutoffDate ? 'badge-inactive' : 'badge-active'}`} style={{ fontSize: '0.75rem' }}>
+                                    {reportItem.cutoffDate ? `${reportItem.cutoffDate} 이전` : '전체 기간'}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '0.85rem 0.5rem' }}>{reportItem.conversationCount}개</td>
+                                <td style={{ padding: '0.85rem 0.5rem' }}>{reportItem.completedCount}개</td>
+                                <td style={{ padding: '0.85rem 0.5rem', fontWeight: 700, color: 'var(--primary)' }}>
+                                  {reportItem.avgScore != null ? `${reportItem.avgScore}점` : '-'}
+                                </td>
+                                <td style={{ padding: '0.85rem 0.5rem', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                  {new Date(reportItem.generatedAt).toLocaleDateString('ko-KR', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </td>
+                                <td style={{ padding: '0.85rem 0.5rem', textAlign: 'right' }}>
+                                  <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                                    <button
+                                      className="btn btn-sm btn-secondary"
+                                      onClick={() => setViewingReport(reportItem)}
+                                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
+                                    >
+                                      📄 리포트 보기
+                                    </button>
+                                    <button
+                                      className="btn btn-sm btn-ghost"
+                                      onClick={() => {
+                                        const found = students.find((s) => s.name === reportItem.studentName);
+                                        if (found) {
+                                          handleSelectStudent(found);
+                                        } else {
+                                          alert('학생 정보를 찾을 수 없습니다.');
+                                        }
+                                      }}
+                                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
+                                    >
+                                      💬 대화 보기
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : convLoading ? (
+                <div className="loading-container" style={{ minHeight: '30vh' }}>
+                  <div className="loading-spinner" />
+                </div>
+              ) : (
+                <div>
+                  {/* 학생 헤더 */}
+                  <div style={{ marginBottom: '1.5rem' }}>
+                    <h2 style={{ fontSize: '1.15rem', fontWeight: 700 }}>
+                      {selectedStudent.name}
+                    </h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      총 {conversations.length}개 과제 참여
+                      {' · '}
+                      완료 {conversations.filter((c) => c.status === 'completed').length}개
+                    </p>
+                  </div>
+
+                  {/* AI 분석 섹션 */}
+                  {conversations.length > 0 && (
+                    <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
+                      <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+                        🧠 AI 학생 분석
+                      </h3>
+
+                      {/* 날짜 기준 선택 */}
+                      <div style={{ marginBottom: '1rem' }}>
+                        <label className="form-label" style={{ fontSize: '0.85rem' }}>
+                          📅 기준 시점 (비워두면 현재까지 전체 분석)
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <input
+                            type="date"
+                            className="form-input"
+                            value={analysisDate}
+                            onChange={(e) => handleDateChange(e.target.value)}
+                            style={{ maxWidth: '180px' }}
+                          />
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${!analysisDate ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleDateChange('')}
+                          >
+                            전체
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${analysisDate === getDatePreset(7) ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleDateChange(getDatePreset(7))}
+                          >
+                            최근 1주
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${analysisDate === getDatePreset(30) ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleDateChange(getDatePreset(30))}
+                          >
+                            최근 1개월
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${analysisDate === getDatePreset(60) ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => handleDateChange(getDatePreset(60))}
+                          >
+                            최근 2개월
+                          </button>
+                        </div>
+                        {analysisDate && (
+                          <p className="form-hint" style={{ marginTop: '0.5rem' }}>
+                            {analysisDate}까지의 대화 {filteredConversations.length}개를 기준으로 분석합니다.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* 점수 추이 미니 차트 */}
+                      {scoreTrend.length >= 2 && (
+                        <div style={{
+                          marginBottom: '1rem',
+                          padding: '0.75rem 1rem',
+                          background: 'rgba(0, 102, 204, 0.05)',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid var(--border-color)',
+                        }}>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
+                            📊 점수 추이
+                          </p>
+                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {scoreTrend.map((item, i) => {
+                              const maxVal = item.maxScore || Math.max(...scoreTrend.map((s) => s.score), 5);
+                              const heightPct = Math.max(10, (item.score / maxVal) * 100);
+                              return (
+                                <div key={i} style={{ textAlign: 'center', flex: '1 1 0', minWidth: '40px', maxWidth: '80px' }}>
+                                  <div style={{
+                                    fontSize: '0.7rem',
+                                    fontWeight: 700,
+                                    color: 'var(--primary)',
+                                    marginBottom: '0.25rem',
+                                  }}>
+                                    {item.score}점
+                                  </div>
+                                  <div style={{
+                                    height: `${heightPct * 0.6}px`,
+                                    minHeight: '6px',
+                                    background: `linear-gradient(to top, var(--primary), var(--primary-bright))`,
+                                    borderRadius: '3px 3px 0 0',
+                                    marginBottom: '0.25rem',
+                                  }} />
+                                  <div style={{
+                                    fontSize: '0.65rem',
+                                    color: 'var(--text-muted)',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                  }}>
+                                    {formatShortDate(item.date)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <button
+                        className="btn btn-primary"
+                        onClick={handleAnalyze}
+                        disabled={analysisLoading || filteredConversations.length === 0}
+                        style={{ width: '100%' }}
+                      >
+                        {analysisLoading
+                          ? '🧠 AI가 분석하고 있어요...'
+                          : `🔍 ${analysisDate ? `${analysisDate} 기준` : '현재 시점'} AI 분석하기 (${filteredConversations.length}개 대화)`}
+                      </button>
+
+                      {/* AI 분석 결과 */}
+                      {analysisReport && (
+                        <div style={{
+                          marginTop: '1rem',
+                          padding: '1.25rem',
+                          background: 'rgba(168, 85, 247, 0.05)',
+                          borderRadius: 'var(--radius-md)',
+                          border: '1px solid rgba(168, 85, 247, 0.2)',
+                        }}>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '0.75rem',
+                          }}>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--purple-light)' }}>
+                              📋 AI 분석 리포트
+                            </span>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              기준: {analysisReport.cutoffDate} · 생성: {analysisReport.generatedAt}
+                            </span>
+                          </div>
+                          <div style={{
+                            whiteSpace: 'pre-wrap',
+                            fontSize: '0.9rem',
+                            color: 'var(--text-secondary)',
+                            lineHeight: 1.7,
+                          }}>
+                            {analysisReport.content}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* 대화 목록 */}
+                  {conversations.length === 0 ? (
+                    <div className="empty-state">
+                      <p className="empty-state-text">이 학생의 대화 기록이 없습니다.</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* 전체 열기/닫기 버튼 */}
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={toggleAllConvs}
+                          style={{ fontSize: '0.82rem' }}
+                        >
+                          {expandedConvIds.size === conversations.length ? '▲ 전체 접기' : '▼ 전체 펼치기'}
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                        {conversations.map((conv) => {
+                          const status = getStatusBadge(conv);
+                          const isExpanded = expandedConvIds.has(conv.id);
+                          const messages = Array.isArray(conv.messages) ? conv.messages : [];
+
+                          return (
+                            <div key={conv.id} className="card" style={{ padding: '1.25rem' }}>
+                              {/* 헤더 */}
+                              <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'flex-start',
+                                marginBottom: '0.5rem',
+                              }}>
+                                <div>
+                                  <div style={{
+                                    fontWeight: 700,
+                                    fontSize: '0.95rem',
+                                    marginBottom: '0.25rem',
+                                  }}>
+                                    {conv.assignment?.title || '(삭제된 과제)'}
+                                  </div>
+                                  <div style={{
+                                    fontSize: '0.8rem',
+                                    color: 'var(--text-muted)',
+                                  }}>
+                                    {conv.assignment?.subject ? `${conv.assignment.subject} · ` : ''}
+                                    {conv.assignment?.grade || ''}
+                                    {' · '}
+                                    {formatDate(conv.startedAt)}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                  {Number.isFinite(conv.score) && (
+                                    <span className="badge badge-score">{conv.score}점</span>
+                                  )}
+                                  <span className={`badge ${status.className}`}>{status.text}</span>
+                                </div>
+                              </div>
+
+                              {/* 피드백 요약 */}
+                              {conv.feedback && (
+                                <p style={{
+                                  fontSize: '0.85rem',
+                                  color: 'var(--text-secondary)',
+                                  marginBottom: '0.5rem',
+                                  lineHeight: 1.5,
+                                }}>
+                                  💬 {conv.feedback}
+                                </p>
+                              )}
+
+                              {conv.higherScoreTip && (
+                                <p style={{
+                                  fontSize: '0.82rem',
+                                  color: 'var(--text-muted)',
+                                  marginBottom: '0.5rem',
+                                  lineHeight: 1.5,
+                                }}>
+                                  💡 {conv.higherScoreTip}
+                                </p>
+                              )}
+
+                              {/* 대화 내용 토글 */}
+                              {messages.length > 0 && (
+                                <>
+                                  <button
+                                    onClick={() => toggleConv(conv.id)}
+                                    className="btn btn-ghost btn-sm"
+                                    style={{ marginTop: '0.25rem', fontSize: '0.82rem' }}
+                                  >
+                                    {isExpanded ? '▲ 대화 접기' : `▼ 대화 보기 (${messages.length}개 메시지)`}
+                                  </button>
+
+                                  {isExpanded && (
+                                    <div style={{
+                                      marginTop: '0.75rem',
+                                      paddingTop: '0.75rem',
+                                      borderTop: '1px solid var(--border-color)',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '0.5rem',
+                                    }}>
+                                      {messages.map((msg, i) => (
+                                        <div
+                                          key={i}
+                                          className={`chat-bubble chat-bubble-${msg.role}`}
+                                          style={{ maxWidth: '85%' }}
+                                        >
+                                          {(msg.role === 'bot' || msg.role === 'unicorn') && (
+                                            <div className="chat-sender">오늘배움봇</div>
+                                          )}
+                                          <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 리포트 보기 모달 */}
+      {viewingReport && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(26, 26, 26, 0.6)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999,
+          padding: '1.5rem',
+        }} onClick={() => setViewingReport(null)}>
+          <div style={{
+            background: 'var(--bg)',
+            borderRadius: 'var(--radius-lg)',
+            boxShadow: 'var(--shadow-lg)',
+            width: '100%',
+            maxWidth: '750px',
+            maxHeight: '85vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+            border: '1px solid var(--border)',
+          }} onClick={(e) => e.stopPropagation()}>
+            {/* 모달 헤더 */}
+            <div style={{
+              padding: '1.25rem 1.5rem',
+              borderBottom: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              background: 'rgba(2, 74, 218, 0.02)',
+            }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
+                  🧠 {viewingReport.studentName} AI 분석 리포트
+                </h3>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                  기준: {viewingReport.cutoffDate ? `${viewingReport.cutoffDate} 이전` : '전체 기간'} · 
+                  생성: {new Date(viewingReport.generatedAt).toLocaleString('ko-KR')}
+                </p>
+              </div>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => setViewingReport(null)}
+                style={{ fontSize: '1.25rem', padding: '0.2rem 0.5rem', lineHeight: 1 }}
+              >
+                &times;
+              </button>
+            </div>
+            
+            {/* 모달 내용 */}
+            <div style={{
+              padding: '1.5rem',
+              overflowY: 'auto',
+              whiteSpace: 'pre-wrap',
+              fontSize: '0.9rem',
+              lineHeight: 1.7,
+              color: 'var(--text-secondary)',
+            }}>
+              {viewingReport.report}
+            </div>
+            
+            {/* 모달 푸터 */}
+            <div style={{
+              padding: '1rem 1.5rem',
+              borderTop: '1px solid var(--border)',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              background: 'var(--bg-surface)',
+            }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => setViewingReport(null)}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

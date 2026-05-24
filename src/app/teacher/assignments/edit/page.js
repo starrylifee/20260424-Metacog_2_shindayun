@@ -8,6 +8,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { normalizeAssignmentConstraints } from '@/lib/chatConstraints';
 import { hasStudentStartedConversation } from '@/lib/conversationState';
 import { auth } from '@/lib/firebase';
+import BotAvatar from '@/components/BotAvatar';
 import {
   getAssignmentById,
   getConversationsByAssignment,
@@ -195,7 +196,7 @@ function EditAssignmentPageContent() {
     return (
       <div className="page-container">
         <nav className="navbar">
-          <Link href="/teacher" className="navbar-brand"><span className="emoji">🤖</span> 오늘배움봇</Link>
+          <Link href="/teacher" className="navbar-brand"><BotAvatar size={22} /> 오늘배움봇</Link>
           <Link href={`/teacher/assignments/${assignmentId}`} className="btn btn-ghost btn-sm">결과 보기</Link>
         </nav>
         <div className="content-wrapper content-narrow">
@@ -220,7 +221,7 @@ function EditAssignmentPageContent() {
   return (
     <div className="page-container">
       <nav className="navbar">
-        <Link href="/teacher" className="navbar-brand"><span className="emoji">🤖</span> 오늘배움봇</Link>
+        <Link href="/teacher" className="navbar-brand"><BotAvatar size={22} /> 오늘배움봇</Link>
         <Link href={`/teacher/assignments/${assignmentId}`} className="btn btn-ghost btn-sm">결과 보기</Link>
       </nav>
 

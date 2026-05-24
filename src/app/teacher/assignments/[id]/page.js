@@ -15,6 +15,7 @@ import {
   getConversationsByAssignment,
   toggleAssignment,
 } from '@/lib/firestore';
+import BotAvatar from '@/components/BotAvatar';
 import {
   formatScoreOptions,
   getAssignmentMaxScore,
@@ -285,7 +286,7 @@ export default function AssignmentDetail() {
       <div className="page-container">
         <nav className="navbar">
           <Link href="/teacher" className="navbar-brand">
-            <span className="emoji">🤖</span> 오늘배움봇
+            <BotAvatar size={22} /> 오늘배움봇
           </Link>
           <Link href="/teacher" className="btn btn-ghost btn-sm">대시보드</Link>
         </nav>
@@ -307,7 +308,7 @@ export default function AssignmentDetail() {
     <div className="page-container">
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
-          <span className="emoji">🤖</span> 오늘배움봇
+          <BotAvatar size={22} /> 오늘배움봇
         </Link>
         <Link href="/teacher" className="btn btn-ghost btn-sm">대시보드</Link>
       </nav>
@@ -339,7 +340,7 @@ export default function AssignmentDetail() {
                 className="btn btn-ghost btn-sm"
                 style={{ marginLeft: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}
               >
-                🏆 갤러리 보기
+                🏆 명예의 전당 보기
               </a>
             <button
               onClick={() => copyEntryCode(assignment.entryCode)}

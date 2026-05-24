@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
+import BotAvatar from '@/components/BotAvatar';
+
 export default function GalleryPage() {
   const params = useParams();
   const code = params.code;
@@ -31,7 +33,7 @@ export default function GalleryPage() {
     <div className="page-container">
       <nav className="navbar">
         <Link href="/" className="navbar-brand">
-          <span className="emoji">🤖</span> 오늘배움봇
+          <BotAvatar size={22} /> 오늘배움봇
         </Link>
         <Link href="/" className="btn btn-ghost btn-sm">← 돌아가기</Link>
       </nav>

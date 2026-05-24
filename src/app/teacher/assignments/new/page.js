@@ -9,6 +9,7 @@ import mathLessonPlanData from '@/data/mathLessonPlans.json';
 import socialLessonPlanData from '@/data/socialLessonPlans.json';
 import koreanLessonPlanData from '@/data/koreanLessonPlans.json';
 import { auth } from '@/lib/firebase';
+import BotAvatar from '@/components/BotAvatar';
 import { createAssignment, getTeacherSettings } from '@/lib/firestore';
 import {
   getChatLengthExamples,
@@ -312,7 +313,7 @@ export default function NewAssignment() {
       <div className="page-container">
         <nav className="navbar">
           <Link href="/teacher" className="navbar-brand">
-            <span className="emoji">🤖</span> 오늘배움봇
+            <BotAvatar size={22} /> 오늘배움봇
           </Link>
         </nav>
 
@@ -384,7 +385,7 @@ export default function NewAssignment() {
     <div className="page-container">
       <nav className="navbar">
         <Link href="/teacher" className="navbar-brand">
-          <span className="emoji">🤖</span> 오늘배움봇
+          <BotAvatar size={22} /> 오늘배움봇
         </Link>
         <Link href="/teacher" className="btn btn-ghost btn-sm">
           대시보드로
