@@ -18,10 +18,8 @@ export default function TeacherStudents() {
   const [convLoading, setConvLoading] = useState(false);
   const [expandedConvIds, setExpandedConvIds] = useState(new Set());
 
-  // AI 분석 관련 상태
-  const [analysisDate, setAnalysisDate] = useState('');
-  const [analysisLoading, setAnalysisLoading] = useState(false);
-  const [analysisReport, setAnalysisReport] = useState(null);
+  // 보관함 및 읽기 전용 선택 관련 상태
+  const [selectedReportId, setSelectedReportId] = useState('');
 
   // 일괄 분석 & 보관함 관련 상태
   const [reports, setReports] = useState([]);
@@ -30,6 +28,19 @@ export default function TeacherStudents() {
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, currentName: '' });
   const [bulkDate, setBulkDate] = useState('');
   const [viewingReport, setViewingReport] = useState(null);
+
+  const studentReports = useMemo(() => {
+    if (!selectedStudent) return [];
+    return reports.filter((r) => r.studentName === selectedStudent.name);
+  }, [reports, selectedStudent]);
+
+  useEffect(() => {
+    if (selectedStudent && studentReports.length > 0) {
+      setSelectedReportId(studentReports[0].id);
+    } else {
+      setSelectedReportId('');
+    }
+  }, [selectedStudent, studentReports]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
@@ -91,20 +102,6 @@ export default function TeacherStudents() {
     setConversations([]);
     setExpandedConvIds(new Set());
     
-    // 저장된 리포트 캐시가 있으면 가져옴
-    const existing = reports.find(
-      (r) => r.studentName === student.name && r.cutoffDate === (analysisDate || null)
-    );
-    if (existing) {
-      setAnalysisReport({
-        content: existing.report,
-        generatedAt: new Date(existing.generatedAt).toLocaleString('ko-KR'),
-        cutoffDate: existing.cutoffDate || '전체',
-      });
-    } else {
-      setAnalysisReport(null);
-    }
-
     setConvLoading(true);
 
     try {
@@ -149,13 +146,8 @@ export default function TeacherStudents() {
 
   // 날짜 기준 필터링된 대화
   const filteredConversations = useMemo(() => {
-    if (!analysisDate) return conversations;
-    const cutoff = new Date(analysisDate + 'T23:59:59');
-    return conversations.filter((conv) => {
-      const startedAt = conv.startedAt ? new Date(conv.startedAt) : null;
-      return startedAt && startedAt <= cutoff;
-    });
-  }, [conversations, analysisDate]);
+    return conversations;
+  }, [conversations]);
 
   // 점수 추이 계산
   const scoreTrend = useMemo(() => {
@@ -172,61 +164,30 @@ export default function TeacherStudents() {
     }));
   }, [filteredConversations]);
 
-  // 기준일 변경 시 캐시 보고서 자동 매칭
-  const handleDateChange = (newDate) => {
-    setAnalysisDate(newDate);
-    if (!selectedStudent) return;
-    const existing = reports.find(
-      (r) => r.studentName === selectedStudent.name && r.cutoffDate === (newDate || null)
-    );
-    if (existing) {
-      setAnalysisReport({
-        content: existing.report,
-        generatedAt: new Date(existing.generatedAt).toLocaleString('ko-KR'),
-        cutoffDate: existing.cutoffDate || '전체',
-      });
-    } else {
-      setAnalysisReport(null);
+  // 보고서 삭제 요청
+  const handleDeleteReport = async (reportId) => {
+    if (!confirm('이 AI 분석 리포트를 정말로 삭제하시겠습니까? 삭제 후에는 복구할 수 없습니다.')) {
+      return;
     }
-  };
-
-  // AI 분석 요청
-  const handleAnalyze = async () => {
-    if (!selectedStudent || filteredConversations.length === 0) return;
-
-    setAnalysisLoading(true);
-    setAnalysisReport(null);
 
     try {
       const token = await user.getIdToken();
-      const res = await fetch('/api/teacher/students/analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          studentName: selectedStudent.name,
-          cutoffDate: analysisDate || null,
-        }),
+      const res = await fetch(`/api/teacher/students/reports?id=${encodeURIComponent(reportId)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
       });
       const data = await res.json();
       if (data.success) {
-        setAnalysisReport({
-          content: data.report,
-          generatedAt: new Date().toLocaleString('ko-KR'),
-          cutoffDate: analysisDate || '현재',
-        });
+        alert('리포트가 성공적으로 삭제되었습니다.');
+        setViewingReport(null);
         await loadReports(user);
       } else {
-        alert(data.error || 'AI 분석에 실패했습니다.');
+        alert(data.error || '리포트 삭제에 실패했습니다.');
       }
     } catch (error) {
-      console.error('AI analysis error:', error);
-      alert('AI 분석 중 오류가 발생했습니다.');
+      console.error('Delete report error:', error);
+      alert('리포트 삭제 중 오류가 발생했습니다.');
     }
-
-    setAnalysisLoading(false);
   };
 
   // 일괄 AI 분석 요청
@@ -237,9 +198,16 @@ export default function TeacherStudents() {
       return;
     }
 
+    const targetDateLabel = bulkDate ? `${bulkDate} 시점` : '전체 기간';
+    const existingReport = reports.find((r) => r.cutoffDate === (bulkDate || null));
+    if (existingReport) {
+      alert(`${targetDateLabel} 보고서는 이미 생성되었습니다.`);
+      return;
+    }
+
     const confirmMsg = bulkDate 
-      ? `기준일(${bulkDate})까지 대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 모두 일괄 AI 분석하시겠습니까?\n이미 생성된 리포트가 있으면 덮어씌워집니다.`
-      : `대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 전체 기간 기준으로 일괄 AI 분석하시겠습니까?\n이미 생성된 리포트가 있으면 덮어씌워집니다.`;
+      ? `기준일(${bulkDate})까지 대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 모두 일괄 AI 분석하시겠습니까?`
+      : `대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 전체 기간 기준으로 일괄 AI 분석하시겠습니까?`;
 
     if (!confirm(confirmMsg)) {
       return;
@@ -582,13 +550,13 @@ export default function TeacherStudents() {
                                   })}
                                 </td>
                                 <td style={{ padding: '0.85rem 0.5rem', textAlign: 'right' }}>
-                                  <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                                  <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end', alignItems: 'center' }}>
                                     <button
                                       className="btn btn-sm btn-secondary"
                                       onClick={() => setViewingReport(reportItem)}
                                       style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
                                     >
-                                      📄 리포트 보기
+                                      📄 보기
                                     </button>
                                     <button
                                       className="btn btn-sm btn-ghost"
@@ -602,7 +570,20 @@ export default function TeacherStudents() {
                                       }}
                                       style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
                                     >
-                                      💬 대화 보기
+                                      💬 대화
+                                    </button>
+                                    <button
+                                      className="btn btn-sm btn-ghost"
+                                      onClick={() => handleDeleteReport(reportItem.id)}
+                                      style={{
+                                        padding: '0.25rem 0.6rem',
+                                        fontSize: '0.78rem',
+                                        color: '#dc2626',
+                                        border: '1px solid rgba(220, 38, 38, 0.2)',
+                                        background: 'rgba(220, 38, 38, 0.05)',
+                                      }}
+                                    >
+                                      🗑️ 삭제
                                     </button>
                                   </div>
                                 </td>
@@ -620,6 +601,23 @@ export default function TeacherStudents() {
                 </div>
               ) : (
                 <div>
+                  {/* 뒤로가기 버튼 */}
+                  <button
+                    onClick={() => setSelectedStudent(null)}
+                    className="btn btn-secondary btn-sm"
+                    style={{
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.35rem',
+                      fontWeight: 600,
+                      padding: '0.4rem 0.8rem',
+                      fontSize: '0.82rem',
+                    }}
+                  >
+                    ← 전체 목록 / 보관함으로 돌아가기
+                  </button>
+
                   {/* 학생 헤더 */}
                   <div style={{ marginBottom: '1.5rem' }}>
                     <h2 style={{ fontSize: '1.15rem', fontWeight: 700 }}>
@@ -632,154 +630,121 @@ export default function TeacherStudents() {
                     </p>
                   </div>
 
-                  {/* AI 분석 섹션 */}
-                  {conversations.length > 0 && (
-                    <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
-                      <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
-                        🧠 AI 학생 분석
+                  {/* 보관된 AI 분석 리포트 (읽기 전용) */}
+                  {studentReports.length > 0 ? (
+                    <div className="card-glass" style={{ marginBottom: '1.5rem', border: '1px solid rgba(168, 85, 247, 0.25)' }}>
+                      <h3 style={{ marginBottom: '0.75rem', fontSize: '1.05rem', color: 'var(--purple-light)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        🧠 보관된 AI 분석 리포트
                       </h3>
-
-                      {/* 날짜 기준 선택 */}
-                      <div style={{ marginBottom: '1rem' }}>
-                        <label className="form-label" style={{ fontSize: '0.85rem' }}>
-                          📅 기준 시점 (비워두면 현재까지 전체 분석)
-                        </label>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                          <input
-                            type="date"
+                      
+                      {studentReports.length > 1 && (
+                        <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>다른 기준일 리포트 선택:</span>
+                          <select
                             className="form-input"
-                            value={analysisDate}
-                            onChange={(e) => handleDateChange(e.target.value)}
-                            style={{ maxWidth: '180px' }}
-                          />
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${!analysisDate ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => handleDateChange('')}
+                            value={selectedReportId}
+                            onChange={(e) => setSelectedReportId(e.target.value)}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.82rem', maxWidth: '200px' }}
                           >
-                            전체
-                          </button>
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${analysisDate === getDatePreset(7) ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => handleDateChange(getDatePreset(7))}
-                          >
-                            최근 1주
-                          </button>
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${analysisDate === getDatePreset(30) ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => handleDateChange(getDatePreset(30))}
-                          >
-                            최근 1개월
-                          </button>
-                          <button
-                            type="button"
-                            className={`btn btn-sm ${analysisDate === getDatePreset(60) ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => handleDateChange(getDatePreset(60))}
-                          >
-                            최근 2개월
-                          </button>
+                            {studentReports.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.cutoffDate ? `${r.cutoffDate} 이전` : '전체 기간'} ({new Date(r.generatedAt).toLocaleDateString('ko-KR')})
+                              </option>
+                            ))}
+                          </select>
                         </div>
-                        {analysisDate && (
-                          <p className="form-hint" style={{ marginTop: '0.5rem' }}>
-                            {analysisDate}까지의 대화 {filteredConversations.length}개를 기준으로 분석합니다.
-                          </p>
-                        )}
+                      )}
+
+                      {(() => {
+                        const currentReport = studentReports.find((r) => r.id === selectedReportId) || studentReports[0];
+                        if (!currentReport) return null;
+                        return (
+                          <div style={{
+                            padding: '1.25rem',
+                            background: 'rgba(168, 85, 247, 0.03)',
+                            borderRadius: 'var(--radius-md)',
+                            border: '1px solid rgba(168, 85, 247, 0.1)',
+                          }}>
+                            <div style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: '0.75rem',
+                              flexWrap: 'wrap',
+                              gap: '0.5rem',
+                            }}>
+                              <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--purple-light)' }}>
+                                📋 AI 학생 분석 보고서
+                              </span>
+                              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                기준: {currentReport.cutoffDate ? `${currentReport.cutoffDate} 이전` : '전체 기간'} · 생성: {new Date(currentReport.generatedAt).toLocaleString('ko-KR')}
+                              </span>
+                            </div>
+                            <div style={{
+                              whiteSpace: 'pre-wrap',
+                              fontSize: '0.9rem',
+                              color: 'var(--text-secondary)',
+                              lineHeight: 1.7,
+                            }}>
+                              {currentReport.report}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="card-glass" style={{ marginBottom: '1.5rem', padding: '1.25rem', textAlign: 'center', color: 'var(--text-muted)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                      <p style={{ fontSize: '0.88rem' }}>🧠 이 학생은 아직 보관된 AI 분석 리포트가 없습니다.</p>
+                      <p style={{ fontSize: '0.78rem', marginTop: '0.2rem' }}>전체 보관함 화면에서 일괄 분석을 실행해 리포트를 생성할 수 있습니다.</p>
+                    </div>
+                  )}
+
+                  {/* 점수 추이 미니 차트 */}
+                  {scoreTrend.length >= 2 && (
+                    <div style={{
+                      marginBottom: '1rem',
+                      padding: '0.75rem 1rem',
+                      background: 'rgba(0, 102, 204, 0.05)',
+                      borderRadius: 'var(--radius-md)',
+                      border: '1px solid var(--border-color)',
+                    }}>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
+                        📊 점수 추이
+                      </p>
+                      <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {scoreTrend.map((item, i) => {
+                          const maxVal = item.maxScore || Math.max(...scoreTrend.map((s) => s.score), 5);
+                          const heightPct = Math.max(10, (item.score / maxVal) * 100);
+                          return (
+                            <div key={i} style={{ textAlign: 'center', flex: '1 1 0', minWidth: '40px', maxWidth: '80px' }}>
+                              <div style={{
+                                fontSize: '0.7rem',
+                                fontWeight: 700,
+                                color: 'var(--primary)',
+                                marginBottom: '0.25rem',
+                              }}>
+                                {item.score}점
+                              </div>
+                              <div style={{
+                                height: `${heightPct * 0.6}px`,
+                                minHeight: '6px',
+                                background: `linear-gradient(to top, var(--primary), var(--primary-bright))`,
+                                borderRadius: '3px 3px 0 0',
+                                marginBottom: '0.25rem',
+                              }} />
+                              <div style={{
+                                fontSize: '0.65rem',
+                                color: 'var(--text-muted)',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}>
+                                {formatShortDate(item.date)}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-
-                      {/* 점수 추이 미니 차트 */}
-                      {scoreTrend.length >= 2 && (
-                        <div style={{
-                          marginBottom: '1rem',
-                          padding: '0.75rem 1rem',
-                          background: 'rgba(0, 102, 204, 0.05)',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid var(--border-color)',
-                        }}>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '0.5rem' }}>
-                            📊 점수 추이
-                          </p>
-                          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', flexWrap: 'wrap' }}>
-                            {scoreTrend.map((item, i) => {
-                              const maxVal = item.maxScore || Math.max(...scoreTrend.map((s) => s.score), 5);
-                              const heightPct = Math.max(10, (item.score / maxVal) * 100);
-                              return (
-                                <div key={i} style={{ textAlign: 'center', flex: '1 1 0', minWidth: '40px', maxWidth: '80px' }}>
-                                  <div style={{
-                                    fontSize: '0.7rem',
-                                    fontWeight: 700,
-                                    color: 'var(--primary)',
-                                    marginBottom: '0.25rem',
-                                  }}>
-                                    {item.score}점
-                                  </div>
-                                  <div style={{
-                                    height: `${heightPct * 0.6}px`,
-                                    minHeight: '6px',
-                                    background: `linear-gradient(to top, var(--primary), var(--primary-bright))`,
-                                    borderRadius: '3px 3px 0 0',
-                                    marginBottom: '0.25rem',
-                                  }} />
-                                  <div style={{
-                                    fontSize: '0.65rem',
-                                    color: 'var(--text-muted)',
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                  }}>
-                                    {formatShortDate(item.date)}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      <button
-                        className="btn btn-primary"
-                        onClick={handleAnalyze}
-                        disabled={analysisLoading || filteredConversations.length === 0}
-                        style={{ width: '100%' }}
-                      >
-                        {analysisLoading
-                          ? '🧠 AI가 분석하고 있어요...'
-                          : `🔍 ${analysisDate ? `${analysisDate} 기준` : '현재 시점'} AI 분석하기 (${filteredConversations.length}개 대화)`}
-                      </button>
-
-                      {/* AI 분석 결과 */}
-                      {analysisReport && (
-                        <div style={{
-                          marginTop: '1rem',
-                          padding: '1.25rem',
-                          background: 'rgba(168, 85, 247, 0.05)',
-                          borderRadius: 'var(--radius-md)',
-                          border: '1px solid rgba(168, 85, 247, 0.2)',
-                        }}>
-                          <div style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            marginBottom: '0.75rem',
-                          }}>
-                            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--purple-light)' }}>
-                              📋 AI 분석 리포트
-                            </span>
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              기준: {analysisReport.cutoffDate} · 생성: {analysisReport.generatedAt}
-                            </span>
-                          </div>
-                          <div style={{
-                            whiteSpace: 'pre-wrap',
-                            fontSize: '0.9rem',
-                            color: 'var(--text-secondary)',
-                            lineHeight: 1.7,
-                          }}>
-                            {analysisReport.content}
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -986,9 +951,24 @@ export default function TeacherStudents() {
               padding: '1rem 1.5rem',
               borderTop: '1px solid var(--border)',
               display: 'flex',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               background: 'var(--bg-surface)',
             }}>
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => handleDeleteReport(viewingReport.id)}
+                style={{
+                  color: '#dc2626',
+                  border: '1px solid rgba(220, 38, 38, 0.2)',
+                  background: 'rgba(220, 38, 38, 0.05)',
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                }}
+              >
+                🗑️ 리포트 삭제
+              </button>
               <button
                 className="btn btn-secondary btn-sm"
                 onClick={() => setViewingReport(null)}
