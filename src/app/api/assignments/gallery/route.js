@@ -33,20 +33,22 @@ export async function GET(request) {
     const scoreOptions = Array.isArray(assignment.scoreOptions) ? assignment.scoreOptions : [];
     const maxScore = scoreOptions.length > 0 ? Math.max(...scoreOptions) : null;
 
-    // 완료된 대화를 점수 내림차순으로 조회 (복합 인덱스 불필요)
+    // 완료된 대화 조회 (orderBy 없이 - 복합 인덱스 불필요)
     const allSnap = await adminDb
       .collection('conversations')
       .where('assignmentId', '==', assignmentId)
       .where('status', '==', 'completed')
-      .orderBy('score', 'desc')
-      .limit(50)
+      .limit(100)
       .get();
 
-    // 교사가 직접 선정한 항목 우선, 없으면 점수 상위 자동 선택
-    const curatedDocs = allSnap.docs.filter((doc) => doc.data().showInGallery === true);
-    const galleryDocs = curatedDocs.length > 0 ? curatedDocs : allSnap.docs;
+    const allDocs = allSnap.docs;
 
-    const gallery = galleryDocs
+    // 교사가 직접 선정한 항목 우선, 없으면 점수 상위 자동 선택
+    const curatedDocs = allDocs.filter((doc) => doc.data().showInGallery === true);
+    const isCurated = curatedDocs.length > 0;
+    const sourceDocs = isCurated ? curatedDocs : allDocs;
+
+    const gallery = sourceDocs
       .map((doc) => {
         const data = doc.data();
         const messages = Array.isArray(data.messages) ? data.messages : [];
@@ -59,7 +61,12 @@ export async function GET(request) {
           feedback: data.feedback || '',
         };
       })
-      .filter((item) => Number.isFinite(item.score) && item.score > 0 && item.lastMessage.trim())
+      .filter((item) => {
+        if (!item.lastMessage.trim()) return false;
+        // 교사 직접 선정이면 점수 없어도 표시, 자동 선택이면 점수 있는 것만
+        return isCurated ? true : (Number.isFinite(item.score) && item.score > 0);
+      })
+      .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
       .slice(0, 8);
 
     return NextResponse.json({
