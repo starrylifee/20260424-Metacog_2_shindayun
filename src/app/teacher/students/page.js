@@ -644,8 +644,8 @@ export default function TeacherStudents() {
                               <tr key={reportItem.id} style={{ borderBottom: '1px solid var(--border)', verticalAlign: 'middle' }}>
                                 <td style={{ padding: '0.85rem 0.5rem', fontWeight: 600 }}>{reportItem.studentName}</td>
                                 <td style={{ padding: '0.85rem 0.5rem' }}>
-                                  <span className={`badge ${reportItem.cutoffDate ? 'badge-inactive' : 'badge-active'}`} style={{ fontSize: '0.75rem' }}>
-                                    {reportItem.cutoffDate ? `${reportItem.cutoffDate} 이전` : '전체 기간'}
+                                  <span className={`badge ${reportItem.periodLabel && reportItem.periodLabel !== '전체 기간' ? 'badge-inactive' : 'badge-active'}`} style={{ fontSize: '0.75rem' }}>
+                                    {reportItem.periodLabel || '전체 기간'}
                                   </span>
                                 </td>
                                 <td style={{ padding: '0.85rem 0.5rem' }}>{reportItem.conversationCount}개</td>
@@ -760,7 +760,7 @@ export default function TeacherStudents() {
                           >
                             {studentReports.map((r) => (
                               <option key={r.id} value={r.id}>
-                                {r.cutoffDate ? `${r.cutoffDate} 이전` : '전체 기간'} ({new Date(r.generatedAt).toLocaleDateString('ko-KR')})
+                                {r.periodLabel || '전체 기간'} ({new Date(r.generatedAt).toLocaleDateString('ko-KR')})
                               </option>
                             ))}
                           </select>
@@ -789,7 +789,7 @@ export default function TeacherStudents() {
                                 📋 AI 학생 분석 보고서
                               </span>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                기준: {currentReport.cutoffDate ? `${currentReport.cutoffDate} 이전` : '전체 기간'} · 생성: {new Date(currentReport.generatedAt).toLocaleString('ko-KR')}
+                                기준: {currentReport.periodLabel || '전체 기간'} · 생성: {new Date(currentReport.generatedAt).toLocaleString('ko-KR')}
                               </span>
                             </div>
                             <div style={{
@@ -1033,7 +1033,7 @@ export default function TeacherStudents() {
                   🧠 {viewingReport.studentName} AI 분석 리포트
                 </h3>
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
-                  기준: {viewingReport.cutoffDate ? `${viewingReport.cutoffDate} 이전` : '전체 기간'} · 
+                  기준: {viewingReport.periodLabel || '전체 기간'} ·
                   생성: {new Date(viewingReport.generatedAt).toLocaleString('ko-KR')}
                 </p>
               </div>

@@ -9,13 +9,13 @@ export async function GET(request) {
     const reportsSnap = await adminDb
       .collection('studentReports')
       .where('teacherId', '==', teacher.uid)
-      .orderBy('generatedAt', 'desc')
       .get();
 
     const reports = [];
     reportsSnap.forEach((doc) => {
       reports.push(serializeDoc(doc));
     });
+    reports.sort((a, b) => new Date(b.generatedAt) - new Date(a.generatedAt));
 
     return NextResponse.json({
       success: true,
