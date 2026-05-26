@@ -289,6 +289,15 @@ export default function AssignmentDetail() {
     return avg.toFixed(1);
   };
 
+  const sortedConversations = useMemo(
+    () => [...conversations].sort((a, b) => {
+      const na = Number(a.studentCode) || 0;
+      const nb = Number(b.studentCode) || 0;
+      return na - nb;
+    }),
+    [conversations]
+  );
+
   const canEditAssignment = !conversations.some(hasStudentStartedConversation);
   const growndFailedCount = conversations.filter(
     (c) => c.status === 'completed' && !c.approved && c.approvalStatus === 'failed'
@@ -541,6 +550,7 @@ export default function AssignmentDetail() {
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th>번호</th>
                     <th>학생</th>
                     <th>상태</th>
                     <th>점수</th>
@@ -550,13 +560,16 @@ export default function AssignmentDetail() {
                   </tr>
                 </thead>
                 <tbody>
-                  {conversations.map((conversation) => {
+                  {sortedConversations.map((conversation) => {
                     const status = getStatusLabel(conversation);
                     const isSelected = selectedConv?.id === conversation.id;
-                    const displayName = conversation.studentName || `${conversation.studentCode}번`;
+                    const displayName = conversation.studentName || '-';
 
                     return (
                       <tr key={conversation.id}>
+                        <td style={{ textAlign: 'center', color: 'var(--text-muted)', fontWeight: 600 }}>
+                          {conversation.studentCode || '-'}
+                        </td>
                         <td>
                           <strong>{displayName}</strong>
                         </td>
