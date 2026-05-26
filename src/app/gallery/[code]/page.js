@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 
 import BotAvatar from '@/components/BotAvatar';
 
 export default function GalleryPage() {
   const params = useParams();
+  const router = useRouter();
   const code = params.code;
 
   const [gallery, setGallery] = useState([]);
@@ -35,7 +36,12 @@ export default function GalleryPage() {
         <Link href="/" className="navbar-brand">
           <BotAvatar size={22} /> 오늘배움봇
         </Link>
-        <Link href="/" className="btn btn-ghost btn-sm">← 돌아가기</Link>
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => window.history.length > 1 ? router.back() : router.push('/')}
+        >
+          ← 돌아가기
+        </button>
       </nav>
 
       <div className="content-wrapper">

@@ -193,11 +193,11 @@ export default function AssignmentDetail() {
           setSelectedConv((prev) => ({ ...prev, showInGallery: newValue }));
         }
       } else {
-        alert(data.error || '갤러리 설정에 실패했습니다.');
+        alert(data.error || '명예의 전당 설정에 실패했습니다.');
       }
     } catch (error) {
       console.error('Gallery toggle error:', error);
-      alert('갤러리 설정 중 오류가 발생했습니다.');
+      alert('명예의 전당 설정 중 오류가 발생했습니다.');
     }
     setActionLoading(null);
   };
@@ -547,7 +547,7 @@ export default function AssignmentDetail() {
                     <th>상태</th>
                     <th>점수</th>
                     <th>시작 시간</th>
-                    <th>🏆 갤러리</th>
+                    <th>🏆 명예의 전당</th>
                     <th>관리</th>
                   </tr>
                 </thead>
@@ -573,7 +573,7 @@ export default function AssignmentDetail() {
                               className={`btn btn-sm ${conversation.showInGallery ? 'btn-primary' : 'btn-ghost'}`}
                               onClick={() => handleGalleryToggle(conversation)}
                               disabled={actionLoading === `gallery-${conversation.id}`}
-                              title={conversation.showInGallery ? '갤러리에서 제거' : '갤러리에 추가'}
+                              title={conversation.showInGallery ? '명예의 전당에서 제거' : '명예의 전당에 추가'}
                             >
                               {actionLoading === `gallery-${conversation.id}` ? '...' : conversation.showInGallery ? '✓ 등록됨' : '+ 추가'}
                             </button>
