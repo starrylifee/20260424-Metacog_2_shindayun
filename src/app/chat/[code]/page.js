@@ -8,11 +8,12 @@ import BotAvatar from '@/components/BotAvatar';
 import { bytesToApproxChars, formatStudentMessageByteRange, getUtf8ByteLength } from '@/lib/chatConstraints';
 import { getStudentMessageCount } from '@/lib/conversationState';
 import { getAssignmentMaxScore } from '@/lib/scoreConfig';
+import { stripMarkdown } from '@/lib/textUtils';
 
 function buildWelcomeMessage(assignment) {
   return {
     role: 'bot',
-    content: `안녕! 나는 오늘배움봇이야.\n\n오늘 **"${assignment?.title}"**에서 배운 내용을 네 말로 설명해 줘.\n필요한 부분만 짧게 더 물어보고 마무리할게.`,
+    content: `안녕! 나는 오늘배움봇이야.\n\n오늘 "${assignment?.title}"에서 배운 내용을 네 말로 설명해 줘.\n필요한 부분만 짧게 더 물어보고 마무리할게.`,
   };
 }
 
@@ -321,7 +322,11 @@ export default function ChatPage() {
               {(message.role === 'bot' || message.role === 'unicorn') && (
                 <div className="chat-sender">오늘배움봇</div>
               )}
-              <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
+              <div style={{ whiteSpace: 'pre-wrap' }}>
+                {(message.role === 'bot' || message.role === 'unicorn')
+                  ? stripMarkdown(message.content)
+                  : message.content}
+              </div>
             </div>
           ))}
 
@@ -342,10 +347,10 @@ export default function ChatPage() {
                     {score}점{Number.isFinite(maxScore) ? ` / ${maxScore}점` : ''}
                   </div>
                 )}
-                {feedback && <div className="score-feedback">{feedback}</div>}
+                {feedback && <div className="score-feedback">{stripMarkdown(feedback)}</div>}
                 {nextStepTip && (
                   <div className="score-feedback" style={{ marginTop: '0.75rem' }}>
-                    <strong>💡 다음에 해보면 좋을 것</strong> {nextStepTip}
+                    <strong>💡 다음에 해보면 좋을 것</strong> {stripMarkdown(nextStepTip)}
                   </div>
                 )}
                 <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>

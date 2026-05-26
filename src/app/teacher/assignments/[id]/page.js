@@ -22,6 +22,7 @@ import {
   getAssignmentScoreOptions,
   getScoringStyleLabel,
 } from '@/lib/scoreConfig';
+import { stripMarkdown } from '@/lib/textUtils';
 
 function canResetConversation(conversation) {
   return !conversation.approved;
@@ -633,20 +634,24 @@ export default function AssignmentDetail() {
                   {(selectedConv.messages || []).map((message, index) => (
                     <div key={index} className={`chat-bubble chat-bubble-${message.role}`} style={{ maxWidth: '85%' }}>
                       {(message.role === 'bot' || message.role === 'unicorn') && <div className="chat-sender">오늘배움봇</div>}
-                      <div style={{ whiteSpace: 'pre-wrap' }}>{message.content}</div>
+                      <div style={{ whiteSpace: 'pre-wrap' }}>
+                        {(message.role === 'bot' || message.role === 'unicorn')
+                          ? stripMarkdown(message.content)
+                          : message.content}
+                      </div>
                     </div>
                   ))}
                 </div>
 
                 {selectedConv.feedback && (
                   <div className="score-feedback" style={{ marginTop: '1rem' }}>
-                    <strong>AI 피드백 ({selectedConv.score}점{Number.isFinite(maxScore) ? `/${maxScore}점` : ''})</strong> {selectedConv.feedback}
+                    <strong>AI 피드백 ({selectedConv.score}점{Number.isFinite(maxScore) ? `/${maxScore}점` : ''})</strong> {stripMarkdown(selectedConv.feedback)}
                   </div>
                 )}
 
                 {(selectedConv.nextStepTip || selectedConv.higherScoreTip) && (
                   <div className="score-feedback" style={{ marginTop: '0.75rem' }}>
-                    <strong>💡 다음에 해볼 것</strong> {selectedConv.nextStepTip || selectedConv.higherScoreTip}
+                    <strong>💡 다음에 해볼 것</strong> {stripMarkdown(selectedConv.nextStepTip || selectedConv.higherScoreTip)}
                   </div>
                 )}
 

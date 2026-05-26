@@ -7,6 +7,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 
 import { auth } from '@/lib/firebase';
 import BotAvatar from '@/components/BotAvatar';
+import { stripMarkdown } from '@/lib/textUtils';
 
 export default function TeacherStudents() {
   const router = useRouter();
@@ -798,7 +799,7 @@ export default function TeacherStudents() {
                               color: 'var(--text-secondary)',
                               lineHeight: 1.7,
                             }}>
-                              {currentReport.report}
+                              {stripMarkdown(currentReport.report)}
                             </div>
                           </div>
                         );
@@ -1055,7 +1056,7 @@ export default function TeacherStudents() {
               lineHeight: 1.7,
               color: 'var(--text-secondary)',
             }}>
-              {viewingReport.report}
+              {stripMarkdown(viewingReport.report)}
             </div>
             
             {/* 모달 푸터 */}

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 
 import BotAvatar from '@/components/BotAvatar';
+import { stripMarkdown } from '@/lib/textUtils';
 
 export default function GalleryPage() {
   const params = useParams();
@@ -101,7 +102,7 @@ export default function GalleryPage() {
                   margin: 0,
                   wordBreak: 'keep-all',
                 }}>
-                  {item.lastMessage}
+                  {stripMarkdown(item.lastMessage)}
                 </p>
                 {item.feedback && (
                   <p style={{
@@ -112,7 +113,7 @@ export default function GalleryPage() {
                     paddingTop: '0.75rem',
                     lineHeight: 1.55,
                   }}>
-                    💬 {item.feedback}
+                    💬 {stripMarkdown(item.feedback)}
                   </p>
                 )}
               </div>
