@@ -358,8 +358,6 @@ export default function AssignmentDetail() {
               입장코드: <strong style={{ color: 'var(--cyan-primary)', letterSpacing: '0.1em' }}>{assignment.entryCode}</strong>
               <a
                 href={`/gallery/${assignment.entryCode}`}
-                target="_blank"
-                rel="noreferrer"
                 className="btn btn-ghost btn-sm"
                 style={{ marginLeft: '0.5rem', fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}
               >
