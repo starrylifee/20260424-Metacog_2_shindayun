@@ -33,20 +33,19 @@ export async function GET(request) {
     const scoreOptions = Array.isArray(assignment.scoreOptions) ? assignment.scoreOptions : [];
     const maxScore = scoreOptions.length > 0 ? Math.max(...scoreOptions) : null;
 
-    // 완료된 대화 조회 (orderBy 없이 - 복합 인덱스 불필요)
+    // assignmentId 단일 조건만 Firestore에 걸고 나머지는 JS 필터 (복합 인덱스 불필요)
     const allSnap = await adminDb
       .collection('conversations')
       .where('assignmentId', '==', assignmentId)
-      .where('status', '==', 'completed')
-      .limit(100)
+      .limit(200)
       .get();
 
-    const allDocs = allSnap.docs;
+    const completedDocs = allSnap.docs.filter((doc) => doc.data().status === 'completed');
 
     // 교사가 직접 선정한 항목 우선, 없으면 점수 상위 자동 선택
-    const curatedDocs = allDocs.filter((doc) => doc.data().showInGallery === true);
+    const curatedDocs = completedDocs.filter((doc) => doc.data().showInGallery === true);
     const isCurated = curatedDocs.length > 0;
-    const sourceDocs = isCurated ? curatedDocs : allDocs;
+    const sourceDocs = isCurated ? curatedDocs : completedDocs;
 
     const gallery = sourceDocs
       .map((doc) => {
