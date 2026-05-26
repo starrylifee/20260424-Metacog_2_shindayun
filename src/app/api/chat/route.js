@@ -551,6 +551,30 @@ export async function POST(request) {
       };
     }
 
+    // 만점 미만 조기 종료 방지: 남은 턴이 있는데 만점이 아니면 추가 질문으로 전환
+    if (parsedReply.finished && allowFinish && !shouldForceFinish) {
+      const maxScoreVal = getAssignmentMaxScore(assignment);
+      if (Number.isFinite(parsedReply.score) && parsedReply.score < maxScoreVal) {
+        const followUpPrompt = buildSystemPrompt(assignment, {
+          shouldForceFinish: false,
+          allowFinish: false,
+          maxTurns: effectiveMaxTurns,
+        });
+        const followUpText = await createChatReply(
+          [{ role: 'system', content: followUpPrompt }, ...conversationMessages],
+          { temperature: 0.7, maxTokens: 300 }
+        );
+        const followUpParsed = extractCompletionData(followUpText, assignment);
+        parsedReply = {
+          finished: false,
+          score: null,
+          feedback: null,
+          higherScoreTip: null,
+          reply: followUpParsed.reply || '조금 더 설명해 줄 수 있어? 구체적인 예시나 이유를 더 말해 줘.',
+        };
+      }
+    }
+
     if (shouldForceFinish && !parsedReply.finished) {
       const forcedFinalReply =
         await createStructuredForcedFinalReply(assignment, conversationMessages) ||
