@@ -25,6 +25,7 @@ export default function TeacherSettings() {
     defaultMinStudentMessageBytes: mathDefaults.minStudentMessageBytes,
     defaultMaxStudentMessageBytes: mathDefaults.maxStudentMessageBytes,
     students: [],
+    galleryCommentsEnabled: false,
   });
 
   const [newStudent, setNewStudent] = useState({ name: '', password: '', code: '' });
@@ -47,6 +48,7 @@ export default function TeacherSettings() {
           defaultMinStudentMessageBytes: existing.defaultMinStudentMessageBytes ?? mathDefaults.minStudentMessageBytes,
           defaultMaxStudentMessageBytes: existing.defaultMaxStudentMessageBytes ?? mathDefaults.maxStudentMessageBytes,
           students: Array.isArray(existing.students) ? existing.students : [],
+          galleryCommentsEnabled: existing.galleryCommentsEnabled ?? false,
         });
       }
     });
@@ -67,6 +69,7 @@ export default function TeacherSettings() {
         defaultMinStudentMessageBytes: settings.defaultMinStudentMessageBytes,
         defaultMaxStudentMessageBytes: settings.defaultMaxStudentMessageBytes,
         students: settings.students,
+        galleryCommentsEnabled: settings.galleryCommentsEnabled,
         email: user.email,
         displayName: user.displayName,
       });
@@ -278,6 +281,45 @@ export default function TeacherSettings() {
               />
               <p className="form-hint">채팅 완료 시 해당 학생의 Grownd 번호로 포인트가 자동 전송됩니다.</p>
             </div>
+          </div>
+
+          {/* 명예의 전당 설정 */}
+          <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+              🏆 명예의 전당 설정
+            </h3>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+              <div
+                onClick={() => setSettings((prev) => ({ ...prev, galleryCommentsEnabled: !prev.galleryCommentsEnabled }))}
+                style={{
+                  width: '44px',
+                  height: '24px',
+                  borderRadius: '12px',
+                  background: settings.galleryCommentsEnabled ? 'var(--purple-light)' : 'var(--border-color)',
+                  position: 'relative',
+                  transition: 'background 0.2s',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '50%',
+                  background: '#fff',
+                  position: 'absolute',
+                  top: '3px',
+                  left: settings.galleryCommentsEnabled ? '23px' : '3px',
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.95rem', fontWeight: 500 }}>학생 응원 댓글 허용</div>
+                <p className="form-hint" style={{ margin: 0 }}>
+                  활성화하면 로그인한 학생이 명예의 전당 답변에 응원 한마디를 남길 수 있습니다. (최대 50자)
+                </p>
+              </div>
+            </label>
           </div>
 
           {/* 대화 기본값 */}

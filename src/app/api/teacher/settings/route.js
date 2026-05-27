@@ -36,6 +36,7 @@ export async function POST(request) {
       defaultMinStudentMessageBytes = null,
       defaultMaxStudentMessageBytes = null,
       students = [],
+      galleryCommentsEnabled = false,
     } = await request.json();
 
     const mathDefaults = getTeacherConstraintDefaults({
@@ -71,6 +72,7 @@ export async function POST(request) {
       defaultMinStudentMessageBytes: mathDefaults.minStudentMessageBytes,
       defaultMaxStudentMessageBytes: mathDefaults.maxStudentMessageBytes,
       students: normalizedStudents,
+      galleryCommentsEnabled: Boolean(galleryCommentsEnabled),
       updatedAt: FieldValue.serverTimestamp(),
     };
 

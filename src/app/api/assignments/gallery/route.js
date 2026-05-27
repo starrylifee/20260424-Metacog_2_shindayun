@@ -53,6 +53,7 @@ export async function GET(request) {
         const messages = Array.isArray(data.messages) ? data.messages : [];
         const lastStudentMsg = [...messages].reverse().find((m) => m.role === 'student');
         return {
+          conversationId: doc.id,
           score: data.score,
           maxScore,
           studentName: anonymizeName(data.studentName),
@@ -68,10 +69,17 @@ export async function GET(request) {
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
       .slice(0, 8);
 
+    const teacherSnap = await adminDb.collection('teachers').doc(assignment.teacherId).get();
+    const galleryCommentsEnabled = teacherSnap.exists
+      ? (teacherSnap.data().galleryCommentsEnabled ?? false)
+      : false;
+
     return NextResponse.json({
       success: true,
       gallery,
       assignmentTitle: assignment.title || '',
+      assignmentId,
+      galleryCommentsEnabled,
     });
   } catch (error) {
     console.error('Gallery API error:', error);
