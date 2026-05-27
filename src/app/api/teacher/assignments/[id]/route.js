@@ -218,6 +218,15 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ success: true });
     }
 
+    if (bodyKeys.length === 1 && typeof body.galleryCommentsEnabled === 'boolean') {
+      await ref.update({
+        galleryCommentsEnabled: body.galleryCommentsEnabled,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      return NextResponse.json({ success: true });
+    }
+
     await assertAssignmentNotStarted(assignmentId);
 
     const updateData = buildUpdatedAssignmentData(snapshot.data(), body || {});

@@ -175,6 +175,30 @@ export default function AssignmentDetail() {
     }
   };
 
+  const handleGalleryCommentsToggle = async () => {
+    if (!assignment) return;
+    const newValue = !assignment.galleryCommentsEnabled;
+    setActionLoading('gallery-comments');
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/teacher/assignments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ galleryCommentsEnabled: newValue }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAssignment((prev) => ({ ...prev, galleryCommentsEnabled: newValue }));
+      } else {
+        alert(data.error || '설정 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Gallery comments toggle error:', error);
+      alert('설정 변경 중 오류가 발생했습니다.');
+    }
+    setActionLoading(null);
+  };
+
   const handleGalleryToggle = async (conversation) => {
     const newValue = !conversation.showInGallery;
     setActionLoading(`gallery-${conversation.id}`);
@@ -373,6 +397,15 @@ export default function AssignmentDetail() {
               >
                 🏆 명예의 전당 보기
               </a>
+              <button
+                onClick={handleGalleryCommentsToggle}
+                disabled={actionLoading === 'gallery-comments'}
+                className="btn btn-ghost btn-sm"
+                style={{ marginLeft: '0.25rem', fontSize: '0.8rem', padding: '0.2rem 0.6rem', opacity: assignment.galleryCommentsEnabled ? 1 : 0.55 }}
+                title={assignment.galleryCommentsEnabled ? '응원 댓글 허용 중 (클릭하면 끄기)' : '응원 댓글 허용 안 함 (클릭하면 켜기)'}
+              >
+                {actionLoading === 'gallery-comments' ? '...' : assignment.galleryCommentsEnabled ? '💬 응원댓글 켜짐' : '💬 응원댓글 꺼짐'}
+              </button>
             <button
               onClick={() => copyEntryCode(assignment.entryCode)}
               className="btn btn-ghost btn-sm"

@@ -69,17 +69,12 @@ export async function GET(request) {
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))
       .slice(0, 8);
 
-    const teacherSnap = await adminDb.collection('teachers').doc(assignment.teacherId).get();
-    const galleryCommentsEnabled = teacherSnap.exists
-      ? (teacherSnap.data().galleryCommentsEnabled ?? false)
-      : false;
-
     return NextResponse.json({
       success: true,
       gallery,
       assignmentTitle: assignment.title || '',
       assignmentId,
-      galleryCommentsEnabled,
+      galleryCommentsEnabled: assignment.galleryCommentsEnabled ?? false,
     });
   } catch (error) {
     console.error('Gallery API error:', error);
