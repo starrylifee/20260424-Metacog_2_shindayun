@@ -263,7 +263,17 @@ export async function PATCH(request, { params }) {
     await assertAssignmentNotStarted(assignmentId);
 
     const updateData = buildUpdatedAssignmentData(snapshot.data(), body || {});
-    await ref.update(updateData);
+    const assignmentForRegen = { ...snapshot.data(), ...updateData };
+
+    // 내용이 바뀌면 기존 AI 모범 답안 초기화 후 재생성
+    await ref.update({ ...updateData, aiExampleAnswer: FieldValue.delete() });
+
+    try {
+      const generated = await generateAIExampleAnswer(assignmentForRegen);
+      if (generated) await ref.update({ aiExampleAnswer: generated });
+    } catch (err) {
+      console.error('AI answer regen on assignment edit failed:', err);
+    }
 
     const updatedSnapshot = await ref.get();
 

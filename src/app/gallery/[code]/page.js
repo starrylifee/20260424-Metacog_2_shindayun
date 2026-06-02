@@ -286,7 +286,7 @@ export default function GalleryPage() {
           <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
             <div className="loading-spinner" />
           </div>
-        ) : gallery.length === 0 ? (
+        ) : gallery.length === 0 && !(showExampleAnswers && aiExampleAnswer) ? (
           <div className="empty-state">
             <div className="empty-state-emoji">🌱</div>
             <p className="empty-state-text">아직 등록된 답변이 없어요.</p>
@@ -365,6 +365,11 @@ export default function GalleryPage() {
               </div>
             )}
 
+          {gallery.length === 0 ? (
+            <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+              아직 등록된 학생 답변이 없습니다.
+            </p>
+          ) : (
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
@@ -593,10 +598,11 @@ export default function GalleryPage() {
               );
             })}
           </div>
+          )}
           </>
         )}
 
-        {gallery.length > 0 && (
+        {(gallery.length > 0 || (showExampleAnswers && aiExampleAnswer)) && (
           <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
             <Link href="/" className="btn btn-primary">나도 오늘배움봇과 대화하기</Link>
           </div>
