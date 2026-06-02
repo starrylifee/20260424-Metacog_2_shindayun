@@ -99,6 +99,8 @@ async function duplicateAssignment(assignmentId, assignment, teacherUid) {
     maxStudentMessageBytes: normalizedConstraints.maxStudentMessageBytes,
     isActive: false,
     copiedFromAssignmentId: assignmentId,
+    // 동일 수업 내용이므로 AI 모범 답안 그대로 복사
+    ...(assignment.aiExampleAnswer ? { aiExampleAnswer: assignment.aiExampleAnswer } : {}),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   };

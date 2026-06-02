@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { generateAIExampleAnswer } from '@/lib/aiExampleAnswer';
 import { generateUniqueEntryCode } from '@/lib/assignmentEntryCode';
 import { normalizeAssignmentConstraints } from '@/lib/chatConstraints';
 import { authenticateFirebaseRequest, RequestError } from '@/lib/serverAuth';
@@ -125,6 +126,16 @@ export async function POST(request) {
     };
 
     const docRef = await adminDb.collection('assignments').add(assignmentData);
+
+    // 과제 생성 즉시 AI 모범 답안 생성·저장 (실패해도 과제 생성은 완료)
+    try {
+      const aiExampleAnswer = await generateAIExampleAnswer(assignmentData);
+      if (aiExampleAnswer) {
+        await docRef.update({ aiExampleAnswer });
+      }
+    } catch (err) {
+      console.error('AI example answer generation failed on assignment create:', err);
+    }
 
     return NextResponse.json({
       success: true,
