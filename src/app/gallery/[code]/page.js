@@ -16,6 +16,8 @@ export default function GalleryPage() {
   const [assignmentTitle, setAssignmentTitle] = useState('');
   const [assignmentId, setAssignmentId] = useState('');
   const [galleryCommentsEnabled, setGalleryCommentsEnabled] = useState(false);
+  const [showExampleAnswers, setShowExampleAnswers] = useState(false);
+  const [aiExampleAnswer, setAiExampleAnswer] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Student login state for comments
@@ -45,6 +47,8 @@ export default function GalleryPage() {
           setAssignmentTitle(data.assignmentTitle || '');
           setAssignmentId(data.assignmentId || '');
           setGalleryCommentsEnabled(Boolean(data.galleryCommentsEnabled));
+          setShowExampleAnswers(Boolean(data.showExampleAnswers));
+          setAiExampleAnswer(data.aiExampleAnswer || null);
 
           if (data.galleryCommentsEnabled && data.assignmentId) {
             // Check for existing gallery session
@@ -289,6 +293,75 @@ export default function GalleryPage() {
             <Link href="/" className="btn btn-primary">챗봇 시작하기</Link>
           </div>
         ) : (
+          <>
+            {/* AI 모범 답안 섹션 */}
+            {showExampleAnswers && aiExampleAnswer && (
+              <div style={{ maxWidth: '1000px', margin: '0 auto 1.5rem' }}>
+                <div style={{
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: 'var(--text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                  marginBottom: '0.6rem',
+                }}>
+                  ✨ 예시 답안
+                </div>
+                <div className="card" style={{
+                  padding: '1.25rem',
+                  border: '1.5px solid rgba(251, 191, 36, 0.45)',
+                  background: 'rgba(251, 191, 36, 0.06)',
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '0.75rem',
+                  }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      🤖 AI 모범 답안
+                    </span>
+                    <span className="badge badge-score" style={{ background: 'rgba(251,191,36,0.18)', color: '#b45309' }}>
+                      만점 기준
+                    </span>
+                  </div>
+                  <p style={{
+                    fontSize: '0.95rem',
+                    lineHeight: 1.65,
+                    color: 'var(--text-secondary)',
+                    margin: 0,
+                    wordBreak: 'keep-all',
+                  }}>
+                    {aiExampleAnswer}
+                  </p>
+                  <p style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-muted)',
+                    marginTop: '0.75rem',
+                    marginBottom: 0,
+                    fontStyle: 'italic',
+                  }}>
+                    이 답변은 AI가 생성한 모범 예시입니다.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 학생 우수 답변 섹션 */}
+            {showExampleAnswers && gallery.length > 0 && (
+              <div style={{
+                maxWidth: '1000px',
+                margin: '0 auto 0.6rem',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                color: 'var(--text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}>
+                🏆 우수 학생 답변
+              </div>
+            )}
+
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
@@ -488,6 +561,7 @@ export default function GalleryPage() {
               );
             })}
           </div>
+          </>
         )}
 
         {gallery.length > 0 && (

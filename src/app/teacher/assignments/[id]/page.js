@@ -175,6 +175,30 @@ export default function AssignmentDetail() {
     }
   };
 
+  const handleShowExampleAnswersToggle = async () => {
+    if (!assignment) return;
+    const newValue = !assignment.showExampleAnswers;
+    setActionLoading('show-example-answers');
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/teacher/assignments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ showExampleAnswers: newValue }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setAssignment((prev) => ({ ...prev, showExampleAnswers: newValue }));
+      } else {
+        alert(data.error || '설정 변경에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('Show example answers toggle error:', error);
+      alert('설정 변경 중 오류가 발생했습니다.');
+    }
+    setActionLoading(null);
+  };
+
   const handleGalleryCommentsToggle = async () => {
     if (!assignment) return;
     const newValue = !assignment.galleryCommentsEnabled;
@@ -405,6 +429,15 @@ export default function AssignmentDetail() {
                 title={assignment.galleryCommentsEnabled ? '응원 댓글 허용 중 (클릭하면 끄기)' : '응원 댓글 허용 안 함 (클릭하면 켜기)'}
               >
                 {actionLoading === 'gallery-comments' ? '...' : assignment.galleryCommentsEnabled ? '💬 응원댓글 켜짐' : '💬 응원댓글 꺼짐'}
+              </button>
+              <button
+                onClick={handleShowExampleAnswersToggle}
+                disabled={actionLoading === 'show-example-answers'}
+                className="btn btn-ghost btn-sm"
+                style={{ marginLeft: '0.25rem', fontSize: '0.8rem', padding: '0.2rem 0.6rem', opacity: assignment.showExampleAnswers ? 1 : 0.55 }}
+                title={assignment.showExampleAnswers ? '예시 답안 표시 중 (클릭하면 끄기)' : '예시 답안 숨김 (클릭하면 켜기)'}
+              >
+                {actionLoading === 'show-example-answers' ? '...' : assignment.showExampleAnswers ? '✨ 예시답안 켜짐' : '✨ 예시답안 꺼짐'}
               </button>
             <button
               onClick={() => copyEntryCode(assignment.entryCode)}

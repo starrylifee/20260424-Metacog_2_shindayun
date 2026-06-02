@@ -227,6 +227,15 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ success: true });
     }
 
+    if (bodyKeys.length === 1 && typeof body.showExampleAnswers === 'boolean') {
+      await ref.update({
+        showExampleAnswers: body.showExampleAnswers,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+      return NextResponse.json({ success: true });
+    }
+
     await assertAssignmentNotStarted(assignmentId);
 
     const updateData = buildUpdatedAssignmentData(snapshot.data(), body || {});
