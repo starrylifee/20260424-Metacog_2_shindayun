@@ -47,6 +47,9 @@ export default function AssignmentDetail() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [codeCopied, setCodeCopied] = useState(false);
+  const [showAiAnswer, setShowAiAnswer] = useState(false);
+  const [editingAiAnswer, setEditingAiAnswer] = useState(false);
+  const [aiAnswerDraft, setAiAnswerDraft] = useState('');
 
   const copyEntryCode = (code) => {
     navigator.clipboard.writeText(code).then(() => {
@@ -173,6 +176,50 @@ export default function AssignmentDetail() {
       alert('과제를 복사하지 못했습니다.');
       setActionLoading(null);
     }
+  };
+
+  const handleSaveAiAnswer = async () => {
+    setActionLoading('ai-answer-save');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/teacher/assignments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ aiExampleAnswer: aiAnswerDraft }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAssignment((prev) => ({ ...prev, aiExampleAnswer: aiAnswerDraft.trim() || undefined }));
+        setEditingAiAnswer(false);
+      } else {
+        alert(data.error || '저장에 실패했습니다.');
+      }
+    } catch {
+      alert('저장 중 오류가 발생했습니다.');
+    }
+    setActionLoading(null);
+  };
+
+  const handleRegenerateAiAnswer = async () => {
+    if (!confirm('AI 모범 답안을 새로 생성할까요?')) return;
+    setActionLoading('ai-answer-regen');
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/teacher/assignments/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ regenerateAiExampleAnswer: true }),
+      });
+      const data = await res.json();
+      if (data.success && data.aiExampleAnswer) {
+        setAssignment((prev) => ({ ...prev, aiExampleAnswer: data.aiExampleAnswer }));
+      } else {
+        alert(data.error || '재생성에 실패했습니다.');
+      }
+    } catch {
+      alert('재생성 중 오류가 발생했습니다.');
+    }
+    setActionLoading(null);
   };
 
   const handleShowExampleAnswersToggle = async () => {
@@ -506,6 +553,75 @@ export default function AssignmentDetail() {
             <div className="stat-value">{avgScore()}</div>
             <div className="stat-label">평균 점수{Number.isFinite(maxScore) ? ` / ${maxScore}` : ''}</div>
           </div>
+        </div>
+
+        {/* AI 모범 답안 */}
+        <div className="card-glass" style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: '1rem', color: 'var(--purple-light)', margin: 0 }}>🤖 AI 모범 답안</h3>
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              {showAiAnswer && !editingAiAnswer && (
+                <>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleRegenerateAiAnswer}
+                    disabled={!!actionLoading}
+                    style={{ fontSize: '0.8rem' }}
+                  >
+                    {actionLoading === 'ai-answer-regen' ? '생성 중...' : '🔄 재생성'}
+                  </button>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => { setAiAnswerDraft(assignment.aiExampleAnswer || ''); setEditingAiAnswer(true); }}
+                    style={{ fontSize: '0.8rem' }}
+                  >
+                    ✏️ 수정
+                  </button>
+                </>
+              )}
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => { setShowAiAnswer((p) => !p); setEditingAiAnswer(false); }}
+                style={{ fontSize: '0.8rem' }}
+              >
+                {showAiAnswer ? '접기 ▲' : '펼치기 ▼'}
+              </button>
+            </div>
+          </div>
+
+          {showAiAnswer && (
+            <div style={{ marginTop: '1rem' }}>
+              {editingAiAnswer ? (
+                <>
+                  <textarea
+                    value={aiAnswerDraft}
+                    onChange={(e) => setAiAnswerDraft(e.target.value)}
+                    className="form-input"
+                    style={{ width: '100%', minHeight: '120px', resize: 'vertical', fontFamily: 'inherit', fontSize: '0.9rem', lineHeight: 1.65, boxSizing: 'border-box' }}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.6rem' }}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setEditingAiAnswer(false)}>취소</button>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={handleSaveAiAnswer}
+                      disabled={actionLoading === 'ai-answer-save'}
+                    >
+                      {actionLoading === 'ai-answer-save' ? '저장 중...' : '저장'}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: '0.95rem', lineHeight: 1.65, color: 'var(--text-secondary)', whiteSpace: 'pre-wrap', margin: 0 }}>
+                    {assignment.aiExampleAnswer || '(아직 생성되지 않았습니다)'}
+                  </p>
+                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.6rem', marginBottom: 0 }}>
+                    챗봇이 이 답안을 기준으로 학생을 유도합니다. 내용이 적절하지 않으면 수정하거나 재생성하세요.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {conversations.length > 0 && (

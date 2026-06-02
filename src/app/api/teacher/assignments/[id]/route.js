@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { generateAIExampleAnswer } from '@/lib/aiExampleAnswer';
 import { generateUniqueEntryCode } from '@/lib/assignmentEntryCode';
 import { normalizeAssignmentConstraints } from '@/lib/chatConstraints';
 import { hasStudentStartedConversation } from '@/lib/conversationState';
@@ -236,6 +237,27 @@ export async function PATCH(request, { params }) {
       });
 
       return NextResponse.json({ success: true });
+    }
+
+    // 교사가 직접 AI 모범 답안 수정
+    if (bodyKeys.length === 1 && typeof body.aiExampleAnswer === 'string') {
+      const trimmed = body.aiExampleAnswer.trim();
+      await ref.update({
+        ...(trimmed ? { aiExampleAnswer: trimmed } : { aiExampleAnswer: FieldValue.delete() }),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return NextResponse.json({ success: true });
+    }
+
+    // AI 모범 답안 재생성
+    if (bodyKeys.length === 1 && body.regenerateAiExampleAnswer === true) {
+      const assignment = snapshot.data();
+      const aiExampleAnswer = await generateAIExampleAnswer(assignment);
+      if (!aiExampleAnswer) {
+        return NextResponse.json({ success: false, error: 'AI 답안 생성에 실패했습니다.' }, { status: 500 });
+      }
+      await ref.update({ aiExampleAnswer, updatedAt: FieldValue.serverTimestamp() });
+      return NextResponse.json({ success: true, aiExampleAnswer });
     }
 
     await assertAssignmentNotStarted(assignmentId);
