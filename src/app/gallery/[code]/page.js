@@ -27,6 +27,9 @@ export default function GalleryPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [showLoginForm, setShowLoginForm] = useState(false);
 
+  // Per-card expanded answer state
+  const [expandedAnswers, setExpandedAnswers] = useState(new Set());
+
   // Per-card comments state
   const [expandedConvId, setExpandedConvId] = useState(null);
   const [loadedComments, setLoadedComments] = useState({});
@@ -373,10 +376,18 @@ export default function GalleryPage() {
             {gallery.map((item, i) => {
               const convId = item.conversationId;
               const isExpanded = expandedConvId === convId;
+              const isAnswerExpanded = expandedAnswers.has(i);
               const comments = loadedComments[convId];
               const isLoadingComments = commentsLoading.has(convId);
               const draft = commentDrafts[convId] || '';
               const hasCommented = loggedInStudent && alreadyCommented(convId);
+
+              const fullAnswer = stripMarkdown(item.lastMessage);
+              const PREVIEW_LEN = 180;
+              const isLong = fullAnswer.length > PREVIEW_LEN;
+              const displayAnswer = isLong && !isAnswerExpanded
+                ? fullAnswer.slice(0, PREVIEW_LEN).trimEnd() + '…'
+                : fullAnswer;
 
               return (
                 <div key={i} className="card" style={{ padding: '1.25rem' }}>
@@ -400,9 +411,30 @@ export default function GalleryPage() {
                     color: 'var(--text-secondary)',
                     margin: 0,
                     wordBreak: 'keep-all',
+                    whiteSpace: 'pre-wrap',
                   }}>
-                    {stripMarkdown(item.lastMessage)}
+                    {displayAnswer}
                   </p>
+                  {isLong && (
+                    <button
+                      onClick={() => setExpandedAnswers((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(i)) next.delete(i); else next.add(i);
+                        return next;
+                      })}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontSize: '0.78rem',
+                        color: 'var(--purple-light)',
+                        padding: '0.3rem 0',
+                        marginTop: '0.25rem',
+                      }}
+                    >
+                      {isAnswerExpanded ? '접기 ▲' : '더 보기 ▼'}
+                    </button>
+                  )}
 
                   {item.feedback && (
                     <p style={{

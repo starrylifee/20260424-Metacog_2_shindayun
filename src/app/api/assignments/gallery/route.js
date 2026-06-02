@@ -92,13 +92,14 @@ export async function GET(request) {
       .map((doc) => {
         const data = doc.data();
         const messages = Array.isArray(data.messages) ? data.messages : [];
-        const lastStudentMsg = [...messages].reverse().find((m) => m.role === 'student');
+        const studentMessages = messages.filter((m) => m.role === 'student');
+        const fullAnswer = studentMessages.map((m) => m.content).join('\n\n').trim();
         return {
           conversationId: doc.id,
           score: data.score,
           maxScore,
           studentName: anonymizeName(data.studentName),
-          lastMessage: lastStudentMsg?.content || '',
+          lastMessage: fullAnswer,
           feedback: data.feedback || '',
         };
       })
