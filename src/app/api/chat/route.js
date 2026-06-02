@@ -29,6 +29,40 @@ function getOpenAI() {
 
 const MODEL_NAME = 'gpt-4o-mini';
 
+async function generateAIExampleAnswer(assignment) {
+  try {
+    const keywords = (assignment.keywords || []).join(', ');
+    const scoreOptions = getAssignmentScoreOptions(assignment);
+    const maxScore = getAssignmentMaxScore(assignment);
+
+    const prompt = `다음 학습 과제에 대해 최고 점수를 받을 수 있는 이상적인 학생 답변을 작성해줘.
+
+과제 제목: ${assignment.title}
+학습 목표: ${assignment.learningObjective || ''}
+수업 내용: ${assignment.content || ''}
+핵심 키워드: ${keywords}
+${maxScore !== null ? `최고 점수: ${maxScore}점 만점` : ''}
+
+지침:
+- 학생이 직접 설명하는 것처럼 자연스럽게 작성해줘
+- 핵심 개념을 명확히 설명하고 그 이유와 예시도 포함해
+- 150~250자 정도로 작성해줘
+- 답변 내용만 작성하고 다른 설명은 하지 마`;
+
+    const response = await getOpenAI().chat.completions.create({
+      model: MODEL_NAME,
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 500,
+      temperature: 0.7,
+    });
+
+    return response.choices[0]?.message?.content?.trim() || null;
+  } catch (error) {
+    console.error('AI example answer generation error:', error);
+    return null;
+  }
+}
+
 function getLowestAllowedScore(scoreOptions) {
   return Array.isArray(scoreOptions) && scoreOptions.length > 0 ? scoreOptions[0] : 0;
 }
@@ -60,7 +94,7 @@ function buildScoringStyleGuidance(scoreOptions, scoringStyle) {
 }
 
 function buildSystemPrompt(assignment, options = {}) {
-  const { shouldForceFinish = false, allowFinish = true, maxTurns = 3 } = options;
+  const { shouldForceFinish = false, allowFinish = true, maxTurns = 3, aiExampleAnswer = null } = options;
   const keywords = (assignment.keywords || []).join(', ');
   const scoreOptions = getAssignmentScoreOptions(assignment);
   const maxScore = getAssignmentMaxScore(assignment);
@@ -79,7 +113,7 @@ ${assignment.learningObjective || '(미설정)'}
 === 수업 자료 ===
 ${assignment.content}
 
-${keywords ? `=== 꼭 챙길 표현 ===\n${keywords}\n` : ''}=== 질문 규칙 ===
+${keywords ? `=== 꼭 챙길 표현 ===\n${keywords}\n` : ''}${aiExampleAnswer ? `=== 모범 답안 참고 ===\n아래는 만점 수준의 이상적인 답변 예시야. 학생이 이런 요소들을 자기 말로 설명할 수 있도록 유도해줘. 이 내용을 직접 말해주지 마.\n${aiExampleAnswer}\n` : ''}=== 질문 규칙 ===
 1. 반드시 오늘 수업 범위 안에서만 질문해.
 2. 다음 차시나 단원 전체 내용으로 확장하지 마.
 3. 학생에게 교과서 표현을 그대로 외우게 하지 말고, 학생 말로 설명하게 도와.
@@ -254,19 +288,19 @@ function buildForcedFinalEvaluationPrompt(assignment) {
 {"reply":"string","score":0,"feedback":"string","higherScoreTip":"string"}`;
 }
 
-async function createForcedFinalReply(assignment, conversationMessages) {
+async function createForcedFinalReply(assignment, conversationMessages, aiExampleAnswer = null) {
   const { maxTurns } = normalizeAssignmentConstraints(assignment);
 
   const attempts = [
     {
       temperature: 0.3,
       maxTokens: 420,
-      systemPrompt: buildSystemPrompt(assignment, { shouldForceFinish: true, maxTurns }),
+      systemPrompt: buildSystemPrompt(assignment, { shouldForceFinish: true, maxTurns, aiExampleAnswer }),
     },
     {
       temperature: 0,
       maxTokens: 420,
-      systemPrompt: `${buildSystemPrompt(assignment, { shouldForceFinish: true, maxTurns })}
+      systemPrompt: `${buildSystemPrompt(assignment, { shouldForceFinish: true, maxTurns, aiExampleAnswer })}
 
 === 출력 형식 재강조 ===
 - 이번 응답은 마지막 응답이야.
@@ -465,6 +499,15 @@ export async function POST(request) {
     const assignment = assignmentSnap.data();
     const conversation = conversationSnap.data();
 
+    // AI 모범 답안: 캐시에 있으면 사용, 없으면 백그라운드에서 생성·캐싱
+    let aiExampleAnswer = assignment.aiExampleAnswer || null;
+    if (!aiExampleAnswer) {
+      (async () => {
+        const generated = await generateAIExampleAnswer(assignment);
+        if (generated) await assignmentRef.update({ aiExampleAnswer: generated });
+      })().catch(console.error);
+    }
+
     if (conversation.assignmentId !== assignmentId || conversation.status === 'completed') {
       return NextResponse.json(
         { success: false, error: '이 대화는 더 이상 진행할 수 없습니다.' },
@@ -531,6 +574,7 @@ export async function POST(request) {
       shouldForceFinish,
       allowFinish,
       maxTurns: effectiveMaxTurns,
+      aiExampleAnswer,
     });
 
     let parsedReply = extractCompletionData(
@@ -559,6 +603,7 @@ export async function POST(request) {
           shouldForceFinish: false,
           allowFinish: false,
           maxTurns: effectiveMaxTurns,
+          aiExampleAnswer,
         });
         const followUpText = await createChatReply(
           [{ role: 'system', content: followUpPrompt }, ...conversationMessages],
@@ -578,7 +623,7 @@ export async function POST(request) {
     if (shouldForceFinish && !parsedReply.finished) {
       const forcedFinalReply =
         await createStructuredForcedFinalReply(assignment, conversationMessages) ||
-        await createForcedFinalReply(assignment, conversationMessages);
+        await createForcedFinalReply(assignment, conversationMessages, aiExampleAnswer);
       if (forcedFinalReply) {
         parsedReply = forcedFinalReply;
       }
