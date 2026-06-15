@@ -385,37 +385,60 @@ async function performSecondaryScoreAdjustment(assignment, conversationMessages,
 }
 
 async function sendGrowndPoints(assignment, conversation, pointsToSend) {
-  if (!pointsToSend || pointsToSend <= 0) return;
+  // 진단용 로그 공통 컨텍스트 (API 키는 절대 찍지 않음)
+  const ctx = {
+    conversationId: conversation?.id,
+    studentCode: conversation?.studentCode,
+    points: pointsToSend,
+    teacherId: assignment?.teacherId,
+  };
+
+  if (!pointsToSend || pointsToSend <= 0) {
+    console.warn('[Grownd] 전송 건너뜀: 지급할 점수 없음', ctx);
+    return;
+  }
 
   try {
     const teacherSnap = await adminDb.collection('teachers').doc(assignment.teacherId).get();
-    if (!teacherSnap.exists) return;
+    if (!teacherSnap.exists) {
+      console.warn('[Grownd] 전송 건너뜀: 교사 문서 없음', ctx);
+      return;
+    }
 
     const { growndApiKey, growndClassId } = teacherSnap.data() || {};
-    if (!growndApiKey || !growndClassId || !conversation.studentCode) return;
+    if (!growndApiKey || !growndClassId || !conversation.studentCode) {
+      console.warn('[Grownd] 전송 건너뜀: 설정/학생번호 누락', {
+        ...ctx,
+        hasApiKey: Boolean(growndApiKey),
+        hasClassId: Boolean(growndClassId),
+        classId: growndClassId || null,
+        hasStudentCode: Boolean(conversation.studentCode),
+      });
+      return;
+    }
+
+    const url = `${GROWND_BASE_URL}/api/v1/classes/${growndClassId}/students/${conversation.studentCode}/points`;
+    console.log('[Grownd] 전송 시도', { ...ctx, classId: growndClassId, url });
 
     const growndAbort = new AbortController();
     const timeout = setTimeout(() => growndAbort.abort(), 6000);
 
     let growndResponse;
     try {
-      growndResponse = await fetch(
-        `${GROWND_BASE_URL}/api/v1/classes/${growndClassId}/students/${conversation.studentCode}/points`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': growndApiKey,
-          },
-          body: JSON.stringify({
-            type: 'reward',
-            points: pointsToSend,
-            description: `오늘배움봇 과제 보상 (+${pointsToSend}점)`,
-            source: 'OneumBaeumBot',
-          }),
-          signal: growndAbort.signal,
-        }
-      );
+      growndResponse = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': growndApiKey,
+        },
+        body: JSON.stringify({
+          type: 'reward',
+          points: pointsToSend,
+          description: `오늘배움봇 과제 보상 (+${pointsToSend}점)`,
+          source: 'OneumBaeumBot',
+        }),
+        signal: growndAbort.signal,
+      });
     } finally {
       clearTimeout(timeout);
     }
@@ -423,15 +446,27 @@ async function sendGrowndPoints(assignment, conversation, pointsToSend) {
     const growndResult = await parseGrowndResponse(growndResponse);
 
     if (growndResponse.ok) {
+      console.log('[Grownd] 전송 성공', { ...ctx, classId: growndClassId, status: growndResponse.status });
       return { success: true };
     } else {
       const errMsg = extractGrowndErrorDetail(growndResponse, growndResult);
-      console.error('[Grownd] auto-send failed:', errMsg);
+      console.error('[Grownd] auto-send failed:', {
+        ...ctx,
+        classId: growndClassId,
+        status: growndResponse.status,
+        message: errMsg,
+        body: growndResult,
+      });
       return { success: false, error: errMsg };
     }
   } catch (err) {
-    console.error('[Grownd] auto-send error:', err?.message || err);
-    return { success: false, error: err?.message };
+    const aborted = err?.name === 'AbortError';
+    console.error('[Grownd] auto-send error:', {
+      ...ctx,
+      reason: aborted ? '6초 타임아웃 (Grownd 응답 지연)' : (err?.message || String(err)),
+      name: err?.name,
+    });
+    return { success: false, error: aborted ? 'Grownd 응답 시간 초과(6초). 잠시 후 재전송해 주세요.' : err?.message };
   }
 }
 

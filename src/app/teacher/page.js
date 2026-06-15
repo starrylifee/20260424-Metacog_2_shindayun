@@ -18,6 +18,7 @@ export default function TeacherDashboard() {
   const [classCode, setClassCode] = useState('');
   const [loadError, setLoadError] = useState('');
   const [codeModal, setCodeModal] = useState(null);
+  const [loggingIn, setLoggingIn] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (nextUser) => {
@@ -66,10 +67,17 @@ export default function TeacherDashboard() {
   }, []);
 
   const handleLogin = async () => {
+    if (loggingIn) return;
+    setLoggingIn(true);
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      console.error('Login error:', error);
+      // 사용자가 팝업을 직접 닫거나 중복 요청으로 취소된 경우는 무시
+      if (error?.code !== 'auth/cancelled-popup-request' && error?.code !== 'auth/popup-closed-by-user') {
+        console.error('Login error:', error);
+      }
+    } finally {
+      setLoggingIn(false);
     }
   };
 
@@ -205,6 +213,7 @@ export default function TeacherDashboard() {
             <button
               id="btn-google-login"
               onClick={handleLogin}
+              disabled={loggingIn}
               style={{
                 width: '100%',
                 padding: '14px 24px',
@@ -216,7 +225,8 @@ export default function TeacherDashboard() {
                 fontFamily: 'inherit',
                 fontSize: '15px',
                 fontWeight: 600,
-                cursor: 'pointer',
+                cursor: loggingIn ? 'wait' : 'pointer',
+                opacity: loggingIn ? 0.7 : 1,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

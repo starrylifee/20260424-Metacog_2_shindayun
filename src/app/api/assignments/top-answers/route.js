@@ -23,12 +23,11 @@ export async function GET(request) {
 
     const assignmentId = assignmentSnap.docs[0].id;
 
+    // 등호 필터 2개만 사용해 복합 인덱스 의존 제거 — 정렬은 메모리에서 처리
     const convSnap = await adminDb
       .collection('conversations')
       .where('assignmentId', '==', assignmentId)
       .where('status', '==', 'completed')
-      .orderBy('score', 'desc')
-      .limit(15)
       .get();
 
     const topAnswers = convSnap.docs
@@ -42,6 +41,7 @@ export async function GET(request) {
         };
       })
       .filter((a) => Number.isFinite(a.score) && a.score > 0 && a.answer.trim())
+      .sort((a, b) => b.score - a.score)
       .slice(0, 5)
       .map((a, i) => ({
         label: `학생 ${i + 1}`,
@@ -51,7 +51,10 @@ export async function GET(request) {
 
     return NextResponse.json({ success: true, topAnswers });
   } catch (error) {
-    console.error('Top answers error:', error);
-    return NextResponse.json({ success: false, error: '서버 오류' }, { status: 500 });
+    console.error('Top answers error:', error?.message || error);
+    return NextResponse.json(
+      { success: false, error: `서버 오류: ${error?.message || '알 수 없는 오류'}` },
+      { status: 500 }
+    );
   }
 }

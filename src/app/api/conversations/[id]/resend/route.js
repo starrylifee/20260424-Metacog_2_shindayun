@@ -70,28 +70,43 @@ export async function POST(request, { params }) {
       return NextResponse.json({ success: false, error: '학생 번호(코드) 정보가 누락되었습니다.' }, { status: 400 });
     }
 
+    const url = `${GROWND_BASE_URL}/api/v1/classes/${growndClassId}/students/${conversation.studentCode}/points`;
+    const ctx = { conversationId, studentCode: conversation.studentCode, classId: growndClassId, points: delta };
+    console.log('[Grownd] 재전송 시도', { ...ctx, url });
+
     const growndAbort = new AbortController();
     const timeout = setTimeout(() => growndAbort.abort(), 6000);
 
     let growndResponse;
     try {
-      growndResponse = await fetch(
-        `${GROWND_BASE_URL}/api/v1/classes/${growndClassId}/students/${conversation.studentCode}/points`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': growndApiKey,
-          },
-          body: JSON.stringify({
-            type: 'reward',
-            points: delta,
-            description: `오늘배움봇 과제 보상 (+${delta}점)`,
-            source: 'OneumBaeumBot',
-          }),
-          signal: growndAbort.signal,
-        }
-      );
+      growndResponse = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': growndApiKey,
+        },
+        body: JSON.stringify({
+          type: 'reward',
+          points: delta,
+          description: `오늘배움봇 과제 보상 (+${delta}점)`,
+          source: 'OneumBaeumBot',
+        }),
+        signal: growndAbort.signal,
+      });
+    } catch (fetchErr) {
+      clearTimeout(timeout);
+      const aborted = fetchErr?.name === 'AbortError';
+      console.error('[Grownd] 재전송 네트워크 오류:', {
+        ...ctx,
+        reason: aborted ? '6초 타임아웃 (Grownd 응답 지연)' : (fetchErr?.message || String(fetchErr)),
+        name: fetchErr?.name,
+      });
+      const msg = aborted ? 'Grownd 응답 시간 초과(6초). 잠시 후 다시 시도해 주세요.' : (fetchErr?.message || 'Grownd 전송 실패');
+      await conversationRef.update({
+        approvalStatus: 'failed',
+        lastGrowndError: { message: msg, at: FieldValue.serverTimestamp() },
+      });
+      return NextResponse.json({ success: false, error: msg });
     } finally {
       clearTimeout(timeout);
     }
@@ -99,6 +114,7 @@ export async function POST(request, { params }) {
     const growndResult = await parseGrowndResponse(growndResponse);
 
     if (growndResponse.ok) {
+      console.log('[Grownd] 재전송 성공', { ...ctx, status: growndResponse.status });
       await conversationRef.update({
         paidPoints: alreadyPaid + delta,
         approved: true,
@@ -113,6 +129,12 @@ export async function POST(request, { params }) {
       });
     } else {
       const errMsg = extractGrowndErrorDetail(growndResponse, growndResult);
+      console.error('[Grownd] 재전송 실패:', {
+        ...ctx,
+        status: growndResponse.status,
+        message: errMsg,
+        body: growndResult,
+      });
       await conversationRef.update({
         approvalStatus: 'failed',
         lastGrowndError: {
