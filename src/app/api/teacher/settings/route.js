@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getTeacherConstraintDefaults } from '@/lib/chatConstraints';
+import { generateUniqueClassCode } from '@/lib/classCode';
 import { FieldValue, adminDb, serializeData } from '@/lib/serverDb';
 import { authenticateFirebaseRequest, RequestError } from '@/lib/serverAuth';
 
@@ -29,6 +30,7 @@ export async function POST(request) {
     const {
       growndClassId = '',
       growndApiKey = '',
+      className = '',
       email = '',
       displayName = '',
       defaultMathMinTurns = null,
@@ -61,9 +63,17 @@ export async function POST(request) {
     const ref = adminDb.collection('teachers').doc(teacher.uid);
     const snapshot = await ref.get();
 
+    // 학급 코드는 한 번 생성되면 고정 (없을 때만 새로 발급)
+    let classCode = snapshot.exists ? snapshot.data()?.classCode : null;
+    if (!classCode) {
+      classCode = await generateUniqueClassCode();
+    }
+
     const payload = {
       growndClassId: growndClassId.trim(),
       growndApiKey: growndApiKey.trim(),
+      className: className.trim(),
+      classCode,
       email: email || teacher.email || '',
       displayName: displayName || teacher.name || '',
       defaultMathMinTurns: mathDefaults.minTurns,
@@ -83,7 +93,7 @@ export async function POST(request) {
       });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, classCode });
   } catch (error) {
     if (error instanceof RequestError) {
       return NextResponse.json({ success: false, error: error.message }, { status: error.status });

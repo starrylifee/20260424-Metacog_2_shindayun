@@ -68,6 +68,7 @@ export async function GET(request) {
           status: data.status,
           score: data.score ?? null,
           originalScore: data.originalScore ?? null,
+          approved: Boolean(data.approved),
           feedback: data.feedback || '',
           higherScoreTip: data.higherScoreTip || '',
           messages: data.messages || [],

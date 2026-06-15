@@ -35,7 +35,7 @@ export async function saveTeacherSettings(uid, settings) {
     body: JSON.stringify(settings),
   });
 
-  await parseResponse(response);
+  return parseResponse(response);
 }
 
 export async function getTeacherSettings(uid) {

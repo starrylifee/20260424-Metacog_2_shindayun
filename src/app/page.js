@@ -8,6 +8,7 @@ import BotAvatar from '@/components/BotAvatar';
 export default function HomePage() {
   const router = useRouter();
   const [entryCode, setEntryCode] = useState('');
+  const [classCode, setClassCode] = useState('');
   const [studentName, setStudentName] = useState('');
   const [studentPassword, setStudentPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,6 +35,13 @@ export default function HomePage() {
 
     return () => { cancelled = true; };
   }, [entryCode]);
+
+  const handleClassEntry = (e) => {
+    e.preventDefault();
+    const code = classCode.trim().toUpperCase();
+    if (!code) return;
+    router.push(`/class/${code}`);
+  };
 
   const handleStudentEntry = async (e) => {
     e.preventDefault();
@@ -152,6 +160,27 @@ export default function HomePage() {
               )}
             </form>
           </div>
+
+          <div className="entry-divider">우리 학급 작업장</div>
+
+          <form onSubmit={handleClassEntry} style={{ display: 'flex', gap: '0.5rem' }}>
+            <input
+              type="text"
+              className="form-input form-input-code"
+              placeholder="학급 코드"
+              value={classCode}
+              onChange={(e) => setClassCode(e.target.value.toUpperCase())}
+              maxLength={6}
+              autoComplete="off"
+              style={{ flex: 1 }}
+            />
+            <button type="submit" className="btn btn-secondary" disabled={!classCode.trim()}>
+              🏫 입장
+            </button>
+          </form>
+          <p className="form-hint" style={{ textAlign: 'center', marginTop: '0.4rem' }}>
+            그동안의 프로젝트와 내 답변을 한곳에서 볼 수 있어요
+          </p>
 
           <div className="entry-divider">선생님이신가요?</div>
 

@@ -18,6 +18,8 @@ export default function TeacherSettings() {
   const [saved, setSaved] = useState(false);
 
   const [settings, setSettings] = useState({
+    className: '',
+    classCode: '',
     growndClassId: '',
     growndApiKey: '',
     defaultMathMinTurns: mathDefaults.minTurns,
@@ -40,6 +42,8 @@ export default function TeacherSettings() {
       const existing = await getTeacherSettings(u.uid);
       if (existing) {
         setSettings({
+          className: existing.className || '',
+          classCode: existing.classCode || '',
           growndClassId: existing.growndClassId || '',
           growndApiKey: existing.growndApiKey || '',
           defaultMathMinTurns: existing.defaultMathMinTurns ?? mathDefaults.minTurns,
@@ -59,7 +63,8 @@ export default function TeacherSettings() {
     setSaved(false);
 
     try {
-      await saveTeacherSettings(user.uid, {
+      const result = await saveTeacherSettings(user.uid, {
+        className: settings.className,
         growndClassId: settings.growndClassId,
         growndApiKey: settings.growndApiKey,
         defaultMathMinTurns: settings.defaultMathMinTurns,
@@ -70,6 +75,9 @@ export default function TeacherSettings() {
         email: user.email,
         displayName: user.displayName,
       });
+      if (result?.classCode) {
+        setSettings((prev) => ({ ...prev, classCode: result.classCode }));
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -131,6 +139,46 @@ export default function TeacherSettings() {
         <h1 className="heading-section">⚙️ 설정</h1>
 
         <form onSubmit={handleSave}>
+          {/* 학급 정보 */}
+          <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>
+              🏫 학급 정보
+            </h3>
+            <div className="form-group">
+              <label className="form-label">학급 이름</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="예: 5학년 4반 배움 탐구노트"
+                value={settings.className}
+                onChange={(e) => setSettings((prev) => ({ ...prev, className: e.target.value }))}
+              />
+              <p className="form-hint">학급 대시보드(작업장) 상단에 표시됩니다.</p>
+            </div>
+
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">학급 코드</label>
+              {settings.classCode ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <strong style={{
+                    fontSize: '1.4rem',
+                    letterSpacing: '0.2em',
+                    color: 'var(--cyan-primary)',
+                  }}>
+                    {settings.classCode}
+                  </strong>
+                  <Link href={`/class/${settings.classCode}`} className="btn btn-secondary btn-sm">
+                    🗂️ 작업장 열기
+                  </Link>
+                </div>
+              ) : (
+                <p className="form-hint" style={{ marginTop: 0 }}>
+                  저장하면 학급 코드가 자동으로 만들어집니다. 이 코드로 학생·교사 모두 학급 작업장에 입장합니다.
+                </p>
+              )}
+            </div>
+          </div>
+
           {/* 학생 목록 */}
           <div className="card-glass" style={{ marginBottom: '1.5rem' }}>
             <h3 style={{ marginBottom: '1rem', fontSize: '1rem', color: 'var(--purple-light)' }}>

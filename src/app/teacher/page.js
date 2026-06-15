@@ -15,6 +15,7 @@ export default function TeacherDashboard() {
   const [assignments, setAssignments] = useState([]);
   const [dataLoading, setDataLoading] = useState(false);
   const [hasSettings, setHasSettings] = useState(false);
+  const [classCode, setClassCode] = useState('');
   const [loadError, setLoadError] = useState('');
   const [codeModal, setCodeModal] = useState(null);
 
@@ -24,6 +25,7 @@ export default function TeacherDashboard() {
         setUser(null);
         setAssignments([]);
         setHasSettings(false);
+        setClassCode('');
         setLoadError('');
         setDataLoading(false);
         setAuthLoading(false);
@@ -38,6 +40,7 @@ export default function TeacherDashboard() {
         try {
           const settings = await getTeacherSettings(nextUser.uid);
           setHasSettings(Boolean(settings?.growndApiKey && settings?.growndClassId));
+          setClassCode(settings?.classCode || '');
         } catch (error) {
           console.error('Failed to load teacher settings:', error);
           setHasSettings(false);
@@ -399,6 +402,11 @@ export default function TeacherDashboard() {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {classCode && (
+              <Link href={`/class/${classCode}`} className="btn btn-secondary">
+                🏫 우리 학급 대시보드
+              </Link>
+            )}
             <Link href="/teacher/students" className="btn btn-secondary">
               👩‍🎓 학생별 답변 모음
             </Link>
