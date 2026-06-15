@@ -41,6 +41,17 @@ export async function POST(request, { params }) {
       return NextResponse.json({ success: false, error: '전송할 점수가 없거나 0점 이하입니다.' }, { status: 400 });
     }
 
+    // 이미 지급된 누적 포인트 기준으로 차액만 전송 (이중 지급 방지)
+    const alreadyPaid =
+      conversation.paidPoints ?? (conversation.approved ? (conversation.score ?? 0) : 0);
+    const delta = Math.max(0, score - alreadyPaid);
+    if (delta <= 0) {
+      return NextResponse.json(
+        { success: false, error: '이미 점수만큼 포인트가 지급되었습니다.' },
+        { status: 400 }
+      );
+    }
+
     // 교사의 Grownd API 정보 조회
     const teacherSnap = await adminDb.collection('teachers').doc(teacher.uid).get();
     if (!teacherSnap.exists) {
@@ -74,8 +85,8 @@ export async function POST(request, { params }) {
           },
           body: JSON.stringify({
             type: 'reward',
-            points: score,
-            description: `오늘배움봇 과제 완료 (${score}점)`,
+            points: delta,
+            description: `오늘배움봇 과제 보상 (+${delta}점)`,
             source: 'OneumBaeumBot',
           }),
           signal: growndAbort.signal,
@@ -89,6 +100,7 @@ export async function POST(request, { params }) {
 
     if (growndResponse.ok) {
       await conversationRef.update({
+        paidPoints: alreadyPaid + delta,
         approved: true,
         approvedAt: FieldValue.serverTimestamp(),
         approvalStatus: 'approved',
@@ -97,7 +109,7 @@ export async function POST(request, { params }) {
 
       return NextResponse.json({
         success: true,
-        message: 'Grownd 포인트가 성공적으로 전송되었습니다.',
+        message: `Grownd 포인트 +${delta}점이 전송되었습니다.`,
       });
     } else {
       const errMsg = extractGrowndErrorDetail(growndResponse, growndResult);

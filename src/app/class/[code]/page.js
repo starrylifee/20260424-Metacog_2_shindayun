@@ -417,11 +417,11 @@ export default function ClassDashboardPage() {
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
                           {student.name}
                           {myConv.approved && (
-                            <span style={{ marginLeft: '0.5rem', color: 'var(--primary)' }}>✓ 승인됨</span>
+                            <span style={{ marginLeft: '0.5rem', color: 'var(--primary)' }}>🪙 포인트 지급됨</span>
                           )}
                         </span>
                         {Number.isFinite(myConv.score) && (
-                          <span className="badge badge-score">{myConv.score}점</span>
+                          <span className="badge badge-score">최고 {myConv.score}점</span>
                         )}
                       </div>
                       <p style={{
@@ -439,20 +439,17 @@ export default function ClassDashboardPage() {
                           💬 {stripMarkdown(myConv.feedback)}
                         </p>
                       )}
-                      {myConv.approved ? (
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.75rem', marginBottom: 0, fontStyle: 'italic' }}>
-                          선생님이 승인한 답변이라 다시 도전할 수 없어요.
-                        </p>
-                      ) : (
-                        <button
-                          onClick={handleRetry}
-                          disabled={retrying}
-                          className="btn btn-primary btn-sm"
-                          style={{ marginTop: '0.9rem' }}
-                        >
-                          {retrying ? '이동 중...' : '✏️ 다시 도전하기'}
-                        </button>
-                      )}
+                      <button
+                        onClick={handleRetry}
+                        disabled={retrying}
+                        className="btn btn-primary btn-sm"
+                        style={{ marginTop: '0.9rem' }}
+                      >
+                        {retrying ? '이동 중...' : '✏️ 다시 도전하기'}
+                      </button>
+                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.6rem', marginBottom: 0 }}>
+                        점수가 오르면 오른 만큼만 포인트가 추가로 지급돼요. 점수가 내려가도 최고 기록은 그대로예요.
+                      </p>
                     </div>
                   ) : (
                     <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 
-import { adminDb } from '@/lib/serverDb';
+import { FieldValue, adminDb } from '@/lib/serverDb';
 
-// 학생이 자신의 (미승인) 답변을 지우고 같은 과제에 다시 도전할 수 있게 함
+// 학생이 같은 과제에 다시 도전. 최고 기록과 누적 지급 포인트(paidPoints)는 보존하고
+// 현재 시도만 초기화 → 점수가 오르면 그 차액만 추가로 지급된다.
 export async function POST(request) {
   try {
     const { assignmentId, studentName, studentPassword } = await request.json();
@@ -53,14 +54,39 @@ export async function POST(request) {
     }
 
     const existingDoc = existingSnap.docs[0];
-    if (existingDoc.data().approved === true) {
-      return NextResponse.json(
-        { success: false, error: '선생님이 승인한 답변은 다시 도전할 수 없어요.' },
-        { status: 403 }
-      );
-    }
+    const existing = existingDoc.data();
 
-    await existingDoc.ref.delete();
+    // 최고 기록 보존 (옛 데이터 호환: best* 없으면 현재 기록을 최고로 간주)
+    const bestScore = Number.isFinite(existing.bestScore)
+      ? existing.bestScore
+      : (Number.isFinite(existing.score) ? existing.score : null);
+    const bestMessages = Array.isArray(existing.bestMessages)
+      ? existing.bestMessages
+      : (Array.isArray(existing.messages) ? existing.messages : []);
+    const paidPoints =
+      existing.paidPoints ?? (existing.approved ? (existing.score ?? 0) : 0);
+
+    await existingDoc.ref.update({
+      status: 'in_progress',
+      messages: [],
+      score: null,
+      originalScore: null,
+      scoreAdjustmentReason: '',
+      feedback: null,
+      higherScoreTip: null,
+      nextStepTip: null,
+      studentMessageCount: 0,
+      completedAt: null,
+      sessionTokenHash: null,
+      approvalStatus: null,
+      bestScore,
+      bestMessages,
+      bestFeedback: existing.bestFeedback ?? existing.feedback ?? '',
+      bestHigherScoreTip: existing.bestHigherScoreTip ?? existing.higherScoreTip ?? '',
+      bestNextStepTip: existing.bestNextStepTip ?? existing.nextStepTip ?? '',
+      paidPoints,
+      retriedAt: FieldValue.serverTimestamp(),
+    });
 
     return NextResponse.json({ success: true, entryCode: assignment.entryCode });
   } catch (error) {

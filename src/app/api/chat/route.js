@@ -384,8 +384,8 @@ async function performSecondaryScoreAdjustment(assignment, conversationMessages,
   }
 }
 
-async function sendGrowndPoints(assignment, conversation, score) {
-  if (!score || score <= 0) return;
+async function sendGrowndPoints(assignment, conversation, pointsToSend) {
+  if (!pointsToSend || pointsToSend <= 0) return;
 
   try {
     const teacherSnap = await adminDb.collection('teachers').doc(assignment.teacherId).get();
@@ -409,8 +409,8 @@ async function sendGrowndPoints(assignment, conversation, score) {
           },
           body: JSON.stringify({
             type: 'reward',
-            points: score,
-            description: `오늘배움봇 과제 완료 (${score}점)`,
+            points: pointsToSend,
+            description: `오늘배움봇 과제 보상 (+${pointsToSend}점)`,
             source: 'OneumBaeumBot',
           }),
           signal: growndAbort.signal,
@@ -633,39 +633,80 @@ export async function POST(request) {
       studentMessageCount: studentTurnCount,
     };
 
+    // 이미 지급된 누적 포인트 (옛 데이터 호환: paidPoints 없으면 approved였던 경우 score로 간주)
+    const alreadyPaid =
+      conversation.paidPoints ?? (conversation.approved ? (conversation.score ?? 0) : 0);
+    let paidDelta = 0;
+
     if (finished) {
-      updateData.score = score;
-      updateData.originalScore = originalScore;
-      updateData.scoreAdjustmentReason = scoreAdjustmentReason;
-      updateData.feedback = safeFeedback;
-      updateData.higherScoreTip = safeHigherScoreTip;
-      updateData.nextStepTip = safeNextStepTip;
+      // 최고 기록 산정: 점수가 오를 때만 기록(점수·답변·피드백)을 갱신
+      const prevBest = Number.isFinite(conversation.bestScore)
+        ? conversation.bestScore
+        : (Number.isFinite(conversation.score) ? conversation.score : null);
+      const isNewBest = prevBest === null || (Number.isFinite(score) && score > prevBest);
+
+      if (isNewBest) {
+        updateData.score = score;
+        updateData.originalScore = originalScore;
+        updateData.scoreAdjustmentReason = scoreAdjustmentReason;
+        updateData.feedback = safeFeedback;
+        updateData.higherScoreTip = safeHigherScoreTip;
+        updateData.nextStepTip = safeNextStepTip;
+        updateData.messages = updatedMessages;
+        updateData.bestScore = score;
+        updateData.bestMessages = updatedMessages;
+        updateData.bestFeedback = safeFeedback;
+        updateData.bestHigherScoreTip = safeHigherScoreTip;
+        updateData.bestNextStepTip = safeNextStepTip;
+      } else {
+        // 이번 시도가 더 낮음 → 이전 최고 기록을 그대로 유지
+        const bestMessages = Array.isArray(conversation.bestMessages)
+          ? conversation.bestMessages
+          : updatedMessages;
+        updateData.score = prevBest;
+        updateData.feedback = conversation.bestFeedback ?? safeFeedback;
+        updateData.higherScoreTip = conversation.bestHigherScoreTip ?? safeHigherScoreTip;
+        updateData.nextStepTip = conversation.bestNextStepTip ?? safeNextStepTip;
+        updateData.messages = bestMessages;
+        updateData.bestScore = prevBest;
+        updateData.bestMessages = bestMessages;
+      }
+
       updateData.status = 'completed';
-      updateData.approved = false;
-      updateData.approvalStatus = null;
       updateData.completedAt = FieldValue.serverTimestamp();
       updateData.sessionTokenHash = null;
+
+      // 차액 지급액 = 이번 시도의 실제 점수 − 이미 지급한 누적 포인트
+      paidDelta = Number.isFinite(score) ? Math.max(0, score - alreadyPaid) : 0;
     }
 
     await conversationRef.update(updateData);
 
-    // Auto-send score to Grownd when chat completes
+    // 점수가 오른 만큼(차액)만 Grownd 포인트 지급
     if (finished) {
-      const growndResult = await sendGrowndPoints(assignment, conversation, score);
-      if (growndResult?.success) {
-        await conversationRef.update({
-          approved: true,
-          approvedAt: FieldValue.serverTimestamp(),
-          approvalStatus: 'approved',
-        });
-      } else if (growndResult && !growndResult.success) {
-        await conversationRef.update({
-          approvalStatus: 'failed',
-          lastGrowndError: {
-            message: growndResult.error || '자동 전송 실패',
-            at: FieldValue.serverTimestamp(),
-          },
-        });
+      if (paidDelta > 0) {
+        const growndResult = await sendGrowndPoints(assignment, conversation, paidDelta);
+        if (growndResult?.success) {
+          await conversationRef.update({
+            paidPoints: alreadyPaid + paidDelta,
+            approved: true,
+            approvedAt: FieldValue.serverTimestamp(),
+            approvalStatus: 'approved',
+            lastGrowndError: null,
+          });
+        } else if (growndResult && !growndResult.success) {
+          await conversationRef.update({
+            approvalStatus: 'failed',
+            lastGrowndError: {
+              message: growndResult.error || '자동 전송 실패',
+              at: FieldValue.serverTimestamp(),
+            },
+          });
+        }
+        // growndResult === undefined → 포인트 설정 없음/대상 아님 → 변경 없음
+      } else if (alreadyPaid > 0) {
+        // 추가 지급 없음(이미 최고점만큼 지급됨) — 정산 완료 상태 유지
+        await conversationRef.update({ approvalStatus: 'approved', lastGrowndError: null });
       }
     }
 
