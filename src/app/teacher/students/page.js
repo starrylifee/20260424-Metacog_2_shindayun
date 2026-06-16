@@ -13,6 +13,7 @@ export default function TeacherStudents() {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [students, setStudents] = useState([]);
+  const [subjects, setSubjects] = useState([]);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +35,10 @@ export default function TeacherStudents() {
   const [selectedMonth, setSelectedMonth] = useState('3');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('all'); // 'all' = 전체 과목 통합
+
+  // 보관함 과목 필터 ('all' = 전체)
+  const [boardSubjectFilter, setBoardSubjectFilter] = useState('all');
 
   const getResolvedPeriod = (mode, month, customStart, customEnd) => {
     let start = null;
@@ -122,6 +127,7 @@ export default function TeacherStudents() {
         const data = await res.json();
         if (data.success) {
           setStudents(data.students || []);
+          setSubjects(data.subjects || []);
         }
         await loadReports(user);
       } catch (error) {
@@ -226,6 +232,64 @@ export default function TeacherStudents() {
     }
   };
 
+  // 보관함 과목 필터 + 정렬 (과목 → 학생 → 최신순)
+  const boardReports = useMemo(() => {
+    const filtered =
+      boardSubjectFilter === 'all'
+        ? reports
+        : boardSubjectFilter === '__merged__'
+        ? reports.filter((r) => !r.subject)
+        : reports.filter((r) => r.subject === boardSubjectFilter);
+    return [...filtered].sort((a, b) => {
+      const sa = a.subject || '';
+      const sb = b.subject || '';
+      if (sa !== sb) return sa.localeCompare(sb, 'ko');
+      if (a.studentName !== b.studentName) return a.studentName.localeCompare(b.studentName, 'ko');
+      return new Date(b.generatedAt) - new Date(a.generatedAt);
+    });
+  }, [reports, boardSubjectFilter]);
+
+  // 리포트를 .doc(워드) 파일로 다운로드
+  const handleDownloadDoc = (reportItem) => {
+    const subjLabel = reportItem.subjectLabel || reportItem.subject || '전체 과목';
+    const periodLabel = reportItem.periodLabel || '전체 기간';
+    const generatedAt = new Date(reportItem.generatedAt).toLocaleString('ko-KR');
+    const body = stripMarkdown(reportItem.report || '');
+
+    const esc = (s) =>
+      String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><title>${esc(reportItem.studentName)} AI 분석 리포트</title></head>
+<body style="font-family:'맑은 고딕','Malgun Gothic',sans-serif; font-size:11pt; line-height:1.7; color:#222;">
+<h1 style="font-size:18pt; color:#024ada; margin-bottom:4pt;">${esc(reportItem.studentName)} · AI 학생 분석 리포트</h1>
+<table style="font-size:10pt; color:#555; border-collapse:collapse; margin-bottom:14pt;">
+<tr><td style="padding:2pt 12pt 2pt 0;"><b>과목 범위</b></td><td>${esc(subjLabel)}</td></tr>
+<tr><td style="padding:2pt 12pt 2pt 0;"><b>분석 기준</b></td><td>${esc(periodLabel)}</td></tr>
+<tr><td style="padding:2pt 12pt 2pt 0;"><b>참여 대화</b></td><td>${reportItem.conversationCount ?? '-'}개 (완료 ${reportItem.completedCount ?? '-'}개)</td></tr>
+<tr><td style="padding:2pt 12pt 2pt 0;"><b>평균 점수</b></td><td>${reportItem.avgScore != null ? `${reportItem.avgScore}점` : '-'}</td></tr>
+<tr><td style="padding:2pt 12pt 2pt 0;"><b>생성 일시</b></td><td>${esc(generatedAt)}</td></tr>
+</table>
+<hr style="border:none; border-top:1px solid #ccc; margin-bottom:12pt;">
+<div style="white-space:pre-wrap;">${esc(body)}</div>
+</body></html>`;
+
+    const blob = new Blob(['﻿', html], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '_');
+    a.href = url;
+    a.download = `${safe(reportItem.studentName)}_${safe(subjLabel)}_${safe(periodLabel)}_AI분석.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // 일괄 AI 분석 요청
   const handleBulkAnalyze = async () => {
     const studentsToAnalyze = students.filter((s) => s.conversationCount > 0);
@@ -241,16 +305,27 @@ export default function TeacherStudents() {
       customEndDate
     );
 
-    // 중복 검사: 시작/끝 경계 조건이 기존 보관함에 동일하게 존재하는지 검출
-    const existingReport = reports.find(
-      (r) => r.startDate === resolvedStart && r.endDate === resolvedEnd
-    );
-    if (existingReport) {
-      alert(`[${periodLabel}] 보고서는 이미 생성되었습니다.`);
-      return;
-    }
+    const resolvedSubject = selectedSubject === 'all' ? null : selectedSubject;
+    const subjectLabel = resolvedSubject || '전체 과목';
 
-    const confirmMsg = `[${periodLabel}] 구간의 대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 일괄 AI 분석하시겠습니까?`;
+    // 동적 기간(전체 기간·초기 2주·초기 1개월)은 시간이 지나면 데이터가 달라지므로 재생성(갱신) 허용.
+    // 고정 기간(특정 월·직접 설정)만 동일 보고서 재생성 시 덮어쓰기 확인.
+    const isDynamicPeriod = ['all', 'relative-2w', 'relative-1m'].includes(analysisMode);
+
+    // 같은 과목·기간 기준으로 이미 생성된 보고서 (학생 단위로 존재 여부 판단)
+    const existingForScope = reports.filter(
+      (r) =>
+        r.startDate === resolvedStart &&
+        r.endDate === resolvedEnd &&
+        (r.subject || null) === resolvedSubject
+    );
+
+    let confirmMsg = `[${subjectLabel} · ${periodLabel}] 구간의 대화 기록이 있는 ${studentsToAnalyze.length}명의 학생을 일괄 AI 분석하시겠습니까?`;
+    if (existingForScope.length > 0) {
+      confirmMsg = isDynamicPeriod
+        ? `이 기준(${subjectLabel} · ${periodLabel})으로 이미 생성된 보고서 ${existingForScope.length}건이 있습니다.\n그동안 쌓인 최신 대화까지 반영해 다시 생성(덮어쓰기)할까요?\n대상: ${studentsToAnalyze.length}명`
+        : `이 기준(${subjectLabel} · ${periodLabel})으로 이미 생성된 보고서 ${existingForScope.length}건이 있습니다.\n다시 생성하면 기존 보고서를 덮어씁니다. 계속할까요?\n대상: ${studentsToAnalyze.length}명`;
+    }
 
     if (!confirm(confirmMsg)) {
       return;
@@ -281,6 +356,7 @@ export default function TeacherStudents() {
               startDate: resolvedStart,
               endDate: resolvedEnd,
               periodLabel,
+              subject: resolvedSubject,
             }),
           });
           const data = await res.json();
@@ -352,9 +428,9 @@ export default function TeacherStudents() {
 
       <div className="content-wrapper">
         <div style={{ marginBottom: '2rem' }}>
-          <h1 className="heading-section">👩‍🎓 학생별 답변 모음</h1>
+          <h1 className="heading-section">👩‍🎓 학생별 답변 · 🧠 AI 분석 리포트</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            학생을 선택하면 모든 과제에 걸친 대화 기록을 한눈에 볼 수 있습니다.
+            아래에서 AI 분석 리포트를 과목·기간별로 생성·보관하고, 학생을 선택하면 과제별 대화 기록까지 함께 볼 수 있습니다.
           </p>
         </div>
 
@@ -478,6 +554,35 @@ export default function TeacherStudents() {
                           </button>
                         ))}
                       </div>
+
+                      {/* 과목 범위 선택 */}
+                      {subjects.length > 0 && (
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)', marginRight: '0.5rem' }}>과목 범위:</span>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${selectedSubject === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                            onClick={() => setSelectedSubject('all')}
+                            style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                          >
+                            전체 과목 통합
+                          </button>
+                          {subjects.map((subj) => (
+                            <button
+                              key={subj}
+                              type="button"
+                              className={`btn btn-sm ${selectedSubject === subj ? 'btn-primary' : 'btn-secondary'}`}
+                              onClick={() => setSelectedSubject(subj)}
+                              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem' }}
+                            >
+                              {subj}
+                            </button>
+                          ))}
+                          <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexBasis: '100%' }}>
+                            * &lsquo;전체 과목 통합&rsquo;은 모든 과목을 한 보고서로, 특정 과목 선택 시 해당 과목만 따로 분석합니다.
+                          </span>
+                        </div>
+                      )}
 
                       {/* 분석 방식 세부 조건 */}
                       {analysisMode === 'monthly' && (
@@ -610,21 +715,46 @@ export default function TeacherStudents() {
 
                   {/* 보관함 목록 */}
                   <div className="card" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: 'var(--text)' }}>
-                      📁 보관된 AI 분석 리포트 목록 ({reports.length}건)
-                    </h3>
-                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                      <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text)' }}>
+                        📁 보관된 AI 분석 리포트 목록 ({boardReports.length}건)
+                      </h3>
+                      {subjects.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>과목 필터:</span>
+                          <select
+                            className="form-input"
+                            value={boardSubjectFilter}
+                            onChange={(e) => setBoardSubjectFilter(e.target.value)}
+                            style={{ padding: '0.3rem 0.5rem', fontSize: '0.82rem', maxWidth: '160px' }}
+                          >
+                            <option value="all">전체 보기</option>
+                            <option value="__merged__">전체 과목 통합</option>
+                            {subjects.map((subj) => (
+                              <option key={subj} value={subj}>{subj}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
                     {reportsLoading ? (
                       <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>
                         <div className="loading-spinner" />
                       </div>
-                    ) : reports.length === 0 ? (
+                    ) : boardReports.length === 0 ? (
                       <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)' }}>
                         <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📁</div>
-                        <p style={{ fontSize: '0.9rem' }}>아직 보관된 AI 분석 리포트가 없습니다.</p>
-                        <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
-                          상단 버튼을 눌러 전체 학생 일괄 분석을 실행해 보세요.
-                        </p>
+                        {reports.length === 0 ? (
+                          <>
+                            <p style={{ fontSize: '0.9rem' }}>아직 보관된 AI 분석 리포트가 없습니다.</p>
+                            <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                              상단 버튼을 눌러 전체 학생 일괄 분석을 실행해 보세요.
+                            </p>
+                          </>
+                        ) : (
+                          <p style={{ fontSize: '0.9rem' }}>선택한 과목 필터에 해당하는 리포트가 없습니다.</p>
+                        )}
                       </div>
                     ) : (
                       <div style={{ overflowX: 'auto' }}>
@@ -632,6 +762,7 @@ export default function TeacherStudents() {
                           <thead>
                             <tr style={{ borderBottom: '2px solid var(--border)', textAlign: 'left', color: 'var(--text-muted)' }}>
                               <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>학생 이름</th>
+                              <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>과목</th>
                               <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>기준 구분</th>
                               <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>참여 대화</th>
                               <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>완료된 대화</th>
@@ -641,9 +772,14 @@ export default function TeacherStudents() {
                             </tr>
                           </thead>
                           <tbody>
-                            {reports.map((reportItem) => (
+                            {boardReports.map((reportItem) => (
                               <tr key={reportItem.id} style={{ borderBottom: '1px solid var(--border)', verticalAlign: 'middle' }}>
                                 <td style={{ padding: '0.85rem 0.5rem', fontWeight: 600 }}>{reportItem.studentName}</td>
+                                <td style={{ padding: '0.85rem 0.5rem' }}>
+                                  <span className="badge" style={{ fontSize: '0.75rem', background: reportItem.subject ? 'rgba(2, 74, 218, 0.08)' : 'rgba(0,0,0,0.04)', color: reportItem.subject ? 'var(--primary)' : 'var(--text-muted)' }}>
+                                    {reportItem.subjectLabel || reportItem.subject || '전체 과목'}
+                                  </span>
+                                </td>
                                 <td style={{ padding: '0.85rem 0.5rem' }}>
                                   <span className={`badge ${reportItem.periodLabel && reportItem.periodLabel !== '전체 기간' ? 'badge-inactive' : 'badge-active'}`} style={{ fontSize: '0.75rem' }}>
                                     {reportItem.periodLabel || '전체 기간'}
@@ -670,6 +806,13 @@ export default function TeacherStudents() {
                                       style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
                                     >
                                       📄 보기
+                                    </button>
+                                    <button
+                                      className="btn btn-sm btn-ghost"
+                                      onClick={() => handleDownloadDoc(reportItem)}
+                                      style={{ padding: '0.25rem 0.6rem', fontSize: '0.78rem' }}
+                                    >
+                                      ⬇ DOC
                                     </button>
                                     <button
                                       className="btn btn-sm btn-ghost"
@@ -761,7 +904,7 @@ export default function TeacherStudents() {
                           >
                             {studentReports.map((r) => (
                               <option key={r.id} value={r.id}>
-                                {r.periodLabel || '전체 기간'} ({new Date(r.generatedAt).toLocaleDateString('ko-KR')})
+                                [{r.subjectLabel || r.subject || '전체 과목'}] {r.periodLabel || '전체 기간'} ({new Date(r.generatedAt).toLocaleDateString('ko-KR')})
                               </option>
                             ))}
                           </select>
@@ -790,7 +933,7 @@ export default function TeacherStudents() {
                                 📋 AI 학생 분석 보고서
                               </span>
                               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                기준: {currentReport.periodLabel || '전체 기간'} · 생성: {new Date(currentReport.generatedAt).toLocaleString('ko-KR')}
+                                과목: {currentReport.subjectLabel || currentReport.subject || '전체 과목'} · 기준: {currentReport.periodLabel || '전체 기간'} · 생성: {new Date(currentReport.generatedAt).toLocaleString('ko-KR')}
                               </span>
                             </div>
                             <div style={{
@@ -1034,6 +1177,7 @@ export default function TeacherStudents() {
                   🧠 {viewingReport.studentName} AI 분석 리포트
                 </h3>
                 <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                  과목: {viewingReport.subjectLabel || viewingReport.subject || '전체 과목'} ·
                   기준: {viewingReport.periodLabel || '전체 기간'} ·
                   생성: {new Date(viewingReport.generatedAt).toLocaleString('ko-KR')}
                 </p>
@@ -1082,12 +1226,20 @@ export default function TeacherStudents() {
               >
                 🗑️ 리포트 삭제
               </button>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => setViewingReport(null)}
-              >
-                닫기
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => handleDownloadDoc(viewingReport)}
+                >
+                  ⬇ DOC 다운로드
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setViewingReport(null)}
+                >
+                  닫기
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -349,6 +349,9 @@ export default function TeacherDashboard() {
           <Link href="/teacher/students" className="btn btn-ghost btn-sm">
             학생별 답변
           </Link>
+          <Link href="/teacher/students" className="btn btn-ghost btn-sm">
+            🧠 AI 분석 리포트
+          </Link>
           <Link href="/teacher/settings" className="btn btn-ghost btn-sm">
             설정
           </Link>
@@ -419,6 +422,9 @@ export default function TeacherDashboard() {
             )}
             <Link href="/teacher/students" className="btn btn-secondary">
               👩‍🎓 학생별 답변 모음
+            </Link>
+            <Link href="/teacher/students" className="btn btn-secondary">
+              🧠 AI 분석 리포트
             </Link>
             <Link href="/teacher/assignments/new" className="btn btn-primary">
               ➕ 새 과제

@@ -15,13 +15,16 @@ function getOpenAI() {
 export async function POST(request) {
   try {
     const teacher = await authenticateFirebaseRequest(request);
-    const { studentName, analysisMode, startDate, endDate, periodLabel } = await request.json();
+    const { studentName, analysisMode, startDate, endDate, periodLabel, subject } = await request.json();
 
     if (!studentName) {
       return NextResponse.json({ success: false, error: '학생 이름이 필요합니다.' }, { status: 400 });
     }
 
-    // 교사의 전체 과제 조회
+    // 과목 범위: 값이 있으면 해당 과목만, 없으면 전체 과목 통합
+    const subjectFilter = subject && subject !== 'all' ? subject : null;
+
+    // 교사의 전체 과제 조회 (과목 지정 시 해당 과목만)
     const assignmentsSnap = await adminDb
       .collection('assignments')
       .where('teacherId', '==', teacher.uid)
@@ -34,8 +37,19 @@ export async function POST(request) {
     const assignmentMap = {};
     const assignmentIds = [];
     for (const doc of assignmentsSnap.docs) {
-      assignmentMap[doc.id] = serializeDoc(doc);
+      const data = serializeDoc(doc);
+      if (subjectFilter && data.subject !== subjectFilter) {
+        continue;
+      }
+      assignmentMap[doc.id] = data;
       assignmentIds.push(doc.id);
+    }
+
+    if (assignmentIds.length === 0) {
+      return NextResponse.json({
+        success: false,
+        error: subjectFilter ? `[${subjectFilter}] 과목의 과제가 없습니다.` : '과제가 없습니다.',
+      });
     }
 
     // 학생의 모든 대화 조회
@@ -165,6 +179,7 @@ export async function POST(request) {
       .join('\n');
 
     const cutoffLabel = periodLabel || '전체 기간';
+    const subjectLabel = subjectFilter || '전체 과목';
 
     const systemPrompt = `당신은 초등학교 교사를 위한 학생 분석 AI 어시스턴트입니다.
 아래에 한 학생의 여러 과제에 걸친 대화 기록과 점수가 제공됩니다.
@@ -179,6 +194,7 @@ export async function POST(request) {
 6. 교사에게 드리는 조언: 이 학생을 위한 맞춤형 교수 전략
 
 분석 기준 시점: ${cutoffLabel}
+분석 과목 범위: ${subjectLabel}
 
 ★ 중요 작성 지침 (마크다운 절대 사용 금지):
 - 출력 시 어떠한 마크다운 특수 기호(예: #, ##, ###, **, -, *, _, \` 등)도 사용하지 마세요. 볼드 처리(**글자**)나 글머리 기호(-, *)도 절대 사용하지 마세요.
@@ -190,6 +206,7 @@ export async function POST(request) {
 - 한국어로 작성해 주세요.`;
 
     const userPrompt = `학생: ${studentName}
+분석 과목: ${subjectLabel}
 분석 기준: ${cutoffLabel} 기록
 
 === 점수 추이 ===
@@ -211,14 +228,17 @@ ${conversationSummaries.join('\n\n')}`;
 
     const report = completion.choices?.[0]?.message?.content?.trim() || '분석 결과를 생성하지 못했습니다.';
 
-    // Firestore에 리포트 저장 (시작 및 끝 시점을 식별값에 포함하여 다중 시점의 리포트 공존 보장)
+    // Firestore에 리포트 저장 (과목·시작·끝 시점을 식별값에 포함하여 다중 시점/과목의 리포트 공존 보장)
     const startStr = startDate || 'all';
     const endStr = endDate || 'all';
-    const reportId = `${teacher.uid}_${studentName}_${startStr}_${endStr}`;
+    const subjectStr = (subjectFilter || 'all').replace(/[/\\]/g, '_');
+    const reportId = `${teacher.uid}_${studentName}_${subjectStr}_${startStr}_${endStr}`;
     const reportData = {
       teacherId: teacher.uid,
       studentName,
       analysisMode: analysisMode || 'all',
+      subject: subjectFilter || null,
+      subjectLabel,
       startDate: startDate || null,
       endDate: endDate || null,
       periodLabel: cutoffLabel,
@@ -242,6 +262,7 @@ ${conversationSummaries.join('\n\n')}`;
       studentName,
       conversationCount: filtered.length,
       periodLabel: cutoffLabel,
+      subjectLabel,
     });
   } catch (error) {
     if (error instanceof RequestError) {

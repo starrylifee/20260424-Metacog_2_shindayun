@@ -16,15 +16,19 @@ export async function GET(request) {
       .get();
 
     if (assignmentsSnap.empty) {
-      return NextResponse.json({ success: true, students: [], conversations: [] });
+      return NextResponse.json({ success: true, students: [], subjects: [], conversations: [] });
     }
 
     const assignmentMap = {};
     const assignmentIds = [];
+    const subjectSet = new Set();
     for (const doc of assignmentsSnap.docs) {
-      assignmentMap[doc.id] = serializeDoc(doc);
+      const data = serializeDoc(doc);
+      assignmentMap[doc.id] = data;
       assignmentIds.push(doc.id);
+      if (data.subject) subjectSet.add(data.subject);
     }
+    const subjects = Array.from(subjectSet).sort((a, b) => a.localeCompare(b, 'ko'));
 
     // Firestore 'in' 연산자 30개 제한 → 배치 처리
     const allConversations = [];
@@ -85,6 +89,7 @@ export async function GET(request) {
     return NextResponse.json({
       success: true,
       students,
+      subjects,
       conversations: filteredConversations,
     });
   } catch (error) {
