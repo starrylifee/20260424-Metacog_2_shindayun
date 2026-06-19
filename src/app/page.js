@@ -90,6 +90,19 @@ export default function HomePage() {
             오늘 배운 것을 오늘배움봇에게 설명해보세요!
           </p>
 
+          <Link
+            href="/dashboard"
+            className="btn btn-primary btn-large"
+            style={{ width: '100%', textAlign: 'center', display: 'block' }}
+          >
+            🎒 내 대시보드 (로그인)
+          </Link>
+          <p className="form-hint" style={{ textAlign: 'center', marginTop: '0.4rem' }}>
+            우리 반 과제와 내 학습 기록을 한곳에서 볼 수 있어요
+          </p>
+
+          <div className="entry-divider">또는 입장 코드로 바로 참여</div>
+
           <div className="card-glass">
             <form onSubmit={handleStudentEntry}>
               <div className="form-group">
@@ -161,7 +174,7 @@ export default function HomePage() {
             </form>
           </div>
 
-          <div className="entry-divider">우리 학급 작업장</div>
+          <div className="entry-divider">학급 코드로 둘러보기</div>
 
           <form onSubmit={handleClassEntry} style={{ display: 'flex', gap: '0.5rem' }}>
             <input
@@ -179,7 +192,7 @@ export default function HomePage() {
             </button>
           </form>
           <p className="form-hint" style={{ textAlign: 'center', marginTop: '0.4rem' }}>
-            그동안의 프로젝트와 내 답변을 한곳에서 볼 수 있어요
+            로그인 없이 우리 반 프로젝트와 명예의 전당을 볼 수 있어요
           </p>
 
           <div className="entry-divider">선생님이신가요?</div>
@@ -189,7 +202,7 @@ export default function HomePage() {
           </Link>
 
           <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-            <Link href="/portfolio" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textDecoration: 'underline' }}>
+            <Link href="/dashboard" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', textDecoration: 'underline' }}>
               📚 내 학습 기록 보기
             </Link>
           </div>

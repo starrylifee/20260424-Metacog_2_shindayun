@@ -2,44 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 
 import BotAvatar from '@/components/BotAvatar';
 import { stripMarkdown } from '@/lib/textUtils';
+import { groupBySubject } from '@/lib/studentPortfolio';
 
-// 과목 표시 순서 (목록에 없는 과목은 뒤에 가나다순)
-const SUBJECT_ORDER = ['국어', '수학', '사회', '과학', '영어', '융합'];
-
-function subjectRank(subject) {
-  const idx = SUBJECT_ORDER.indexOf(subject);
-  return idx === -1 ? SUBJECT_ORDER.length : idx;
-}
-
-function groupBySubject(assignments) {
-  const groups = {};
-  for (const a of assignments) {
-    const subject = a.subject?.trim() || '기타';
-    if (!groups[subject]) groups[subject] = [];
-    groups[subject].push(a);
-  }
-  return Object.entries(groups).sort(([a], [b]) => {
-    const r = subjectRank(a) - subjectRank(b);
-    return r !== 0 ? r : a.localeCompare(b, 'ko');
-  });
-}
-
-function studentAnswerText(conv) {
-  const messages = Array.isArray(conv?.messages) ? conv.messages : [];
-  return messages
-    .filter((m) => m.role === 'student')
-    .map((m) => m.content)
-    .join('\n\n')
-    .trim();
-}
-
-export default function ClassDashboardPage() {
+// 학급코드만으로 로그인 없이 우리 반 프로젝트와 명예의 전당을 둘러보는 게스트 화면.
+// (예: 교실 화면 공유) 내 답변 확인/다시 도전 등 학생 개인 기능은 /dashboard 로 이동.
+export default function ClassBrowsePage() {
   const params = useParams();
-  const router = useRouter();
   const code = params.code;
 
   const [className, setClassName] = useState('');
@@ -50,25 +22,15 @@ export default function ClassDashboardPage() {
   const [openSubjects, setOpenSubjects] = useState({});
   const [selectedId, setSelectedId] = useState(null);
 
-  // 학생 로그인 (내 답변 보기 / 다시 도전)
-  const [showLogin, setShowLogin] = useState(false);
-  const [loginForm, setLoginForm] = useState({ name: '', password: '' });
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [loginError, setLoginError] = useState('');
-  const [student, setStudent] = useState(null); // { name, password }
-  const [myConvByAssignment, setMyConvByAssignment] = useState({});
-
   // 명예의 전당 캐시 (entryCode 기준)
   const [galleryCache, setGalleryCache] = useState({});
   const [galleryLoading, setGalleryLoading] = useState(false);
-  const [retrying, setRetrying] = useState(false);
 
   const grouped = useMemo(() => groupBySubject(assignments), [assignments]);
   const selectedAssignment = useMemo(
     () => assignments.find((a) => a.id === selectedId) || null,
     [assignments, selectedId]
   );
-  const myConv = selectedAssignment ? myConvByAssignment[selectedAssignment.id] : null;
 
   useEffect(() => {
     if (!code) return;
@@ -79,7 +41,6 @@ export default function ClassDashboardPage() {
         if (data.success) {
           setClassName(data.className || '');
           setAssignments(data.assignments || []);
-          // 모든 과목 펼친 상태로 시작
           const open = {};
           for (const a of data.assignments || []) {
             open[a.subject?.trim() || '기타'] = true;
@@ -116,74 +77,6 @@ export default function ClassDashboardPage() {
 
   const toggleSubject = (subject) => {
     setOpenSubjects((prev) => ({ ...prev, [subject]: !prev[subject] }));
-  };
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!loginForm.name.trim() || !loginForm.password.trim()) {
-      setLoginError('이름과 비밀번호를 입력해주세요.');
-      return;
-    }
-    setLoginLoading(true);
-    setLoginError('');
-
-    try {
-      const res = await fetch(
-        `/api/portfolio?name=${encodeURIComponent(loginForm.name.trim())}&password=${encodeURIComponent(loginForm.password.trim())}`
-      );
-      const data = await res.json();
-      if (!data.success) {
-        setLoginError(data.error || '학생 정보를 찾을 수 없습니다.');
-      } else {
-        const map = {};
-        for (const conv of data.conversations || []) {
-          if (conv.assignment?.id) map[conv.assignment.id] = conv;
-        }
-        setMyConvByAssignment(map);
-        setStudent({ name: loginForm.name.trim(), password: loginForm.password });
-        setLoginForm({ name: '', password: '' });
-        setShowLogin(false);
-      }
-    } catch {
-      setLoginError('서버 연결에 실패했어요.');
-    } finally {
-      setLoginLoading(false);
-    }
-  };
-
-  const handleLogout = () => {
-    setStudent(null);
-    setMyConvByAssignment({});
-  };
-
-  const handleRetry = async () => {
-    if (!selectedAssignment || !student || retrying) return;
-    setRetrying(true);
-    try {
-      const res = await fetch('/api/class/retry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assignmentId: selectedAssignment.id,
-          studentName: student.name,
-          studentPassword: student.password,
-        }),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        alert(data.error || '다시 도전할 수 없습니다.');
-        setRetrying(false);
-        return;
-      }
-      sessionStorage.setItem(
-        'metacog_auth',
-        JSON.stringify({ name: student.name, password: student.password })
-      );
-      router.push(`/chat/${data.entryCode}`);
-    } catch {
-      alert('서버 연결에 실패했어요.');
-      setRetrying(false);
-    }
   };
 
   if (loading) {
@@ -224,62 +117,12 @@ export default function ClassDashboardPage() {
           <BotAvatar size={22} /> 오늘배움봇
         </Link>
         <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', flex: 1, textAlign: 'center' }}>
-          {className || '우리 학급'} · 작업장
+          {className || '우리 학급'} · 둘러보기
         </span>
-        {student ? (
-          <button className="btn btn-ghost btn-sm" onClick={handleLogout}>
-            {student.name} 로그아웃
-          </button>
-        ) : (
-          <button className="btn btn-secondary btn-sm" onClick={() => setShowLogin((v) => !v)}>
-            🙋 내 답변 보기
-          </button>
-        )}
+        <Link href="/dashboard" className="btn btn-secondary btn-sm">
+          🙋 로그인하고 내 답변 보기
+        </Link>
       </nav>
-
-      {/* 학생 로그인 폼 */}
-      {showLogin && !student && (
-        <div style={{
-          maxWidth: '420px',
-          margin: '1rem auto 0',
-          padding: '1rem 1.25rem',
-          borderRadius: '12px',
-          background: 'var(--bg-secondary)',
-          border: '1px solid var(--border-color)',
-        }}>
-          <form onSubmit={handleLogin}>
-            <div style={{ fontWeight: 600, marginBottom: '0.6rem', color: 'var(--text-secondary)' }}>
-              이름과 비밀번호로 내 답변을 확인하고 다시 도전할 수 있어요.
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="이름"
-                value={loginForm.name}
-                onChange={(e) => setLoginForm((p) => ({ ...p, name: e.target.value }))}
-                style={{ flex: 1, minWidth: '100px' }}
-              />
-              <input
-                type="password"
-                className="form-input"
-                placeholder="비밀번호"
-                value={loginForm.password}
-                onChange={(e) => setLoginForm((p) => ({ ...p, password: e.target.value }))}
-                style={{ flex: 1, minWidth: '100px' }}
-              />
-              <button type="submit" className="btn btn-primary btn-sm" disabled={loginLoading}>
-                {loginLoading ? '...' : '확인'}
-              </button>
-            </div>
-            {loginError && (
-              <p style={{ color: '#f87171', fontSize: '0.8rem', marginTop: '0.5rem', marginBottom: 0 }}>
-                ⚠️ {loginError}
-              </p>
-            )}
-          </form>
-        </div>
-      )}
 
       <div style={{ display: 'flex', height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
         {/* 작업장 사이드바 */}
@@ -399,75 +242,6 @@ export default function ClassDashboardPage() {
                 </p>
               </div>
 
-              {/* 내 답변 */}
-              {student && (
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <div style={{
-                    fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)',
-                    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem',
-                  }}>
-                    🙋 내 답변
-                  </div>
-                  {myConv ? (
-                    <div className="card" style={{ padding: '1.25rem' }}>
-                      <div style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        marginBottom: '0.6rem',
-                      }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                          {student.name}
-                          {myConv.approved && (
-                            <span style={{ marginLeft: '0.5rem', color: 'var(--primary)' }}>🪙 포인트 지급됨</span>
-                          )}
-                        </span>
-                        {Number.isFinite(myConv.score) && (
-                          <span className="badge badge-score">최고 {myConv.score}점</span>
-                        )}
-                      </div>
-                      <p style={{
-                        fontSize: '0.93rem', lineHeight: 1.65, color: 'var(--text-secondary)',
-                        margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all',
-                      }}>
-                        {studentAnswerText(myConv) || '(작성한 답변이 없어요)'}
-                      </p>
-                      {myConv.feedback && (
-                        <p style={{
-                          fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.75rem',
-                          borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem',
-                          lineHeight: 1.55, marginBottom: 0,
-                        }}>
-                          💬 {stripMarkdown(myConv.feedback)}
-                        </p>
-                      )}
-                      <button
-                        onClick={handleRetry}
-                        disabled={retrying}
-                        className="btn btn-primary btn-sm"
-                        style={{ marginTop: '0.9rem' }}
-                      >
-                        {retrying ? '이동 중...' : '✏️ 다시 도전하기'}
-                      </button>
-                      <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.6rem', marginBottom: 0 }}>
-                        점수가 오르면 오른 만큼만 포인트가 추가로 지급돼요. 점수가 내려가도 최고 기록은 그대로예요.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
-                      <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.9rem' }}>
-                        아직 이 프로젝트에 참여하지 않았어요.
-                      </p>
-                      <button
-                        onClick={handleRetry}
-                        disabled={retrying}
-                        className="btn btn-primary btn-sm"
-                      >
-                        {retrying ? '이동 중...' : '🚀 지금 도전하기'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* AI 모범답안 */}
               {gallery?.showExampleAnswers && gallery?.aiExampleAnswer && (
                 <div style={{ marginBottom: '1.5rem' }}>
@@ -533,6 +307,16 @@ export default function ClassDashboardPage() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* 로그인 안내 */}
+              <div className="card" style={{ marginTop: '1.5rem', padding: '1.1rem 1.25rem', textAlign: 'center' }}>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                  내 답변을 확인하거나 다시 도전하려면 로그인하세요.
+                </p>
+                <Link href="/dashboard" className="btn btn-primary btn-sm">
+                  🙋 내 대시보드 열기
+                </Link>
               </div>
             </div>
           )}
