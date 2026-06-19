@@ -301,6 +301,25 @@ body {
   color: var(--text-muted);
 }
 
+/* 대시보드 과목 구분 헤더 */
+.subject-header {
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  padding-left: 0.1rem;
+}
+
+/* 대시보드 상세(대화/모범답안/명예의전당) 소제목 */
+.detail-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.4rem;
+}
+
 /* ===================================================================
    Buttons — sharp 4px radius (HP two-tier philosophy)
    Button labels: uppercase, 0.7px tracking, weight 600

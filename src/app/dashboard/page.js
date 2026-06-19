@@ -7,21 +7,11 @@ import { useRouter } from 'next/navigation';
 import BotAvatar from '@/components/BotAvatar';
 import { stripMarkdown } from '@/lib/textUtils';
 import {
-  buildTree,
   getMaxScore,
   groupBySubject,
+  subjectRank,
   studentAnswerText,
 } from '@/lib/studentPortfolio';
-
-import mathLessonPlanData from '@/data/mathLessonPlans.json';
-import socialLessonPlanData from '@/data/socialLessonPlans.json';
-import koreanLessonPlanData from '@/data/koreanLessonPlans.json';
-
-const SUBJECT_PLANS = {
-  수학: mathLessonPlanData,
-  사회: socialLessonPlanData,
-  국어: koreanLessonPlanData,
-};
 
 const SESSION_KEY = 'metacog_student';
 
@@ -36,43 +26,59 @@ export default function DashboardPage() {
 
   const [loginForm, setLoginForm] = useState({ name: '', password: '' });
 
-  const [activeTab, setActiveTab] = useState('class'); // 'class' | 'history'
+  const [activeTab, setActiveTab] = useState('todo'); // 'todo' | 'mine'
 
-  // 새 과제 코드로 참여
+  // 활동 코드로 새 작업 참여
   const [joinCode, setJoinCode] = useState('');
 
-  // --- 우리 반 과제 탭 상태 ---
-  const [openSubjects, setOpenSubjects] = useState({});
-  const [selectedId, setSelectedId] = useState(null);
-  const [galleryCache, setGalleryCache] = useState({});
-  const [galleryLoading, setGalleryLoading] = useState(false);
-  const [retrying, setRetrying] = useState(false);
+  // 다시 도전 / 도전하기 진행 표시 (과제 id)
+  const [busyId, setBusyId] = useState(null);
 
-  // --- 내 학습 기록 탭 상태 ---
-  const [selectedConv, setSelectedConv] = useState(null);
-  const [openNodes, setOpenNodes] = useState({});
+  // 내 작업: 인라인으로 펼친 대화
+  const [expandedConvId, setExpandedConvId] = useState(null);
+  const [galleryCache, setGalleryCache] = useState({});
 
   const assignments = data?.assignments || [];
   const conversations = data?.conversations || [];
 
-  const grouped = useMemo(() => groupBySubject(assignments), [assignments]);
-  const convTree = useMemo(
-    () => (conversations.length ? buildTree(conversations) : null),
-    [conversations]
-  );
-  const myConvByAssignment = useMemo(() => {
+  // 활성 과제 빠른 조회 (다시도전 가능 여부 / entryCode / 명예의전당)
+  const activeById = useMemo(() => {
     const map = {};
-    for (const conv of conversations) {
-      if (conv.assignment?.id) map[conv.assignment.id] = conv;
-    }
+    for (const a of assignments) map[a.id] = a;
     return map;
-  }, [conversations]);
+  }, [assignments]);
 
-  const selectedAssignment = useMemo(
-    () => assignments.find((a) => a.id === selectedId) || null,
-    [assignments, selectedId]
+  // 할 일 = 아직 참여하지 않은 우리 반 활성 과제
+  const todoGrouped = useMemo(
+    () => groupBySubject(assignments.filter((a) => !a.hasParticipated)),
+    [assignments]
   );
-  const myConv = selectedAssignment ? myConvByAssignment[selectedAssignment.id] : null;
+  const todoCount = useMemo(
+    () => assignments.filter((a) => !a.hasParticipated).length,
+    [assignments]
+  );
+
+  // 내 작업 = 내가 참여한 모든 대화, 과목별로 묶고 최근순
+  const mineGrouped = useMemo(() => {
+    const groups = {};
+    for (const conv of conversations) {
+      const subject = conv.assignment?.subject?.trim() || '기타';
+      (groups[subject] ||= []).push(conv);
+    }
+    return Object.entries(groups)
+      .sort(([a], [b]) => {
+        const r = subjectRank(a) - subjectRank(b);
+        return r !== 0 ? r : a.localeCompare(b, 'ko');
+      })
+      .map(([subject, items]) => {
+        items.sort((x, y) => {
+          const xt = x.completedAt?._seconds ?? x.completedAt?.seconds ?? 0;
+          const yt = y.completedAt?._seconds ?? y.completedAt?.seconds ?? 0;
+          return yt - xt;
+        });
+        return [subject, items];
+      });
+  }, [conversations]);
 
   // 데이터 적재 (로그인 / 세션 복원 공통)
   const loadDashboard = async (name, password, { silent = false } = {}) => {
@@ -90,12 +96,9 @@ export default function DashboardPage() {
       setData(json);
       setStudent({ name, password });
       sessionStorage.setItem(SESSION_KEY, JSON.stringify({ name, password }));
-      // 모든 과목 펼친 상태로 시작
-      const open = {};
-      for (const a of json.assignments || []) {
-        open[a.subject?.trim() || '기타'] = true;
-      }
-      setOpenSubjects(open);
+      // 첫 화면: 할 일이 있으면 할 일, 없으면 내 작업
+      const hasTodo = (json.assignments || []).some((a) => !a.hasParticipated);
+      setActiveTab(hasTodo ? 'todo' : 'mine');
       return true;
     } catch {
       setError('서버 연결에 실패했어요. 다시 시도해주세요.');
@@ -125,23 +128,29 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 선택한 과제의 명예의 전당 지연 로드
-  useEffect(() => {
-    if (!selectedAssignment?.entryCode) return;
-    const entryCode = selectedAssignment.entryCode;
-    if (galleryCache[entryCode] !== undefined) return;
+  // 펼친 대화가 활성 과제면 명예의 전당 지연 로드
+  const expandedConv = useMemo(
+    () => conversations.find((c) => c.id === expandedConvId) || null,
+    [conversations, expandedConvId]
+  );
+  const expandedEntryCode = expandedConv
+    ? activeById[expandedConv.assignment?.id]?.entryCode
+    : null;
 
-    setGalleryLoading(true);
-    fetch(`/api/assignments/gallery?code=${entryCode}`)
+  useEffect(() => {
+    if (!expandedEntryCode) return;
+    if (galleryCache[expandedEntryCode] !== undefined) return;
+    let cancelled = false;
+    fetch(`/api/assignments/gallery?code=${expandedEntryCode}`)
       .then((r) => r.json())
       .then((d) => {
-        setGalleryCache((prev) => ({ ...prev, [entryCode]: d.success ? d : { gallery: [] } }));
+        if (!cancelled) setGalleryCache((p) => ({ ...p, [expandedEntryCode]: d.success ? d : { gallery: [] } }));
       })
       .catch(() => {
-        setGalleryCache((prev) => ({ ...prev, [entryCode]: { gallery: [] } }));
-      })
-      .finally(() => setGalleryLoading(false));
-  }, [selectedAssignment, galleryCache]);
+        if (!cancelled) setGalleryCache((p) => ({ ...p, [expandedEntryCode]: { gallery: [] } }));
+      });
+    return () => { cancelled = true; };
+  }, [expandedEntryCode, galleryCache]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -156,12 +165,11 @@ export default function DashboardPage() {
     sessionStorage.removeItem(SESSION_KEY);
     setStudent(null);
     setData(null);
-    setSelectedId(null);
-    setSelectedConv(null);
+    setExpandedConvId(null);
     setLoginForm({ name: '', password: '' });
   };
 
-  // 새 과제 코드로 참여 / 미참여 과제 도전 → 채팅으로 핸드오프
+  // 채팅으로 핸드오프
   const goToChat = (entryCode) => {
     if (!student) return;
     sessionStorage.setItem(
@@ -178,36 +186,33 @@ export default function DashboardPage() {
     goToChat(code);
   };
 
-  const handleRetry = async () => {
-    if (!selectedAssignment || !student || retrying) return;
-    setRetrying(true);
+  // 과제 도전/다시도전 (참여 전이면 바로 시작, 참여 후면 현재 시도 초기화)
+  const startChallenge = async (assignmentId, entryCode) => {
+    if (!student || busyId) return;
+    // 활성 과제이고 entryCode가 있으면 retry 엔드포인트(최고기록 보존)를 거친다
+    setBusyId(assignmentId);
     try {
       const res = await fetch('/api/class/retry', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          assignmentId: selectedAssignment.id,
+          assignmentId,
           studentName: student.name,
           studentPassword: student.password,
         }),
       });
       const json = await res.json();
       if (!json.success) {
-        alert(json.error || '다시 도전할 수 없습니다.');
-        setRetrying(false);
+        alert(json.error || '지금은 참여할 수 없는 과제예요.');
+        setBusyId(null);
         return;
       }
-      goToChat(json.entryCode);
+      goToChat(json.entryCode || entryCode);
     } catch {
       alert('서버 연결에 실패했어요.');
-      setRetrying(false);
+      setBusyId(null);
     }
   };
-
-  const toggleSubject = (subject) =>
-    setOpenSubjects((prev) => ({ ...prev, [subject]: !prev[subject] }));
-  const toggleNode = (key) => setOpenNodes((prev) => ({ ...prev, [key]: !prev[key] }));
-  const isOpen = (key) => Boolean(openNodes[key]);
 
   // ---------- 부팅(세션 복원) 중 ----------
   if (booting) {
@@ -290,8 +295,6 @@ export default function DashboardPage() {
   }
 
   // ---------- 로그인 상태 ----------
-  const gallery = selectedAssignment ? galleryCache[selectedAssignment.entryCode] : null;
-
   return (
     <div className="page-container">
       <nav className="navbar">
@@ -306,477 +309,264 @@ export default function DashboardPage() {
         </button>
       </nav>
 
-      {/* 새 과제 코드로 참여 */}
-      <div style={{
-        maxWidth: '720px',
-        margin: '1rem auto 0',
-        padding: '0 1rem',
-      }}>
-        <form onSubmit={handleJoin} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
-            📝 새 과제 참여
-          </span>
-          <input
-            type="text"
-            className="form-input form-input-code"
-            placeholder="입장 코드"
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            maxLength={6}
-            autoComplete="off"
-            style={{ flex: 1 }}
-          />
-          <button type="submit" className="btn btn-primary btn-sm" disabled={!joinCode.trim()}>
-            참여하기
+      <div style={{ maxWidth: '720px', margin: '0 auto', padding: '1rem 1rem 3rem', width: '100%' }}>
+        {/* 활동 코드로 새 작업 참여 */}
+        <div className="card-glass" style={{ marginTop: '0.5rem' }}>
+          <form onSubmit={handleJoin} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)', flexShrink: 0 }}>
+              📝 활동 코드
+            </span>
+            <input
+              type="text"
+              className="form-input form-input-code"
+              placeholder="SUNNY42"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              maxLength={6}
+              autoComplete="off"
+              style={{ flex: 1 }}
+            />
+            <button type="submit" className="btn btn-primary btn-sm" disabled={!joinCode.trim()}>
+              참여하기
+            </button>
+          </form>
+        </div>
+
+        {/* 탭 */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem' }}>
+          <button
+            className={`btn btn-sm ${activeTab === 'todo' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('todo')}
+          >
+            ✅ 할 일 {todoCount}
           </button>
-        </form>
-      </div>
+          <button
+            className={`btn btn-sm ${activeTab === 'mine' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTab('mine')}
+          >
+            📚 내 작업 {conversations.length}
+          </button>
+        </div>
 
-      {/* 탭 */}
-      <div style={{
-        display: 'flex',
-        gap: '0.5rem',
-        maxWidth: '720px',
-        margin: '1rem auto 0',
-        padding: '0 1rem',
-      }}>
-        <button
-          className={`btn btn-sm ${activeTab === 'class' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setActiveTab('class')}
-        >
-          🏫 우리 반 과제
-        </button>
-        <button
-          className={`btn btn-sm ${activeTab === 'history' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => setActiveTab('history')}
-        >
-          📚 내 학습 기록
-        </button>
+        {activeTab === 'todo' ? (
+          <TodoList
+            groups={todoGrouped}
+            busyId={busyId}
+            onChallenge={startChallenge}
+          />
+        ) : (
+          <MineList
+            groups={mineGrouped}
+            activeById={activeById}
+            expandedConvId={expandedConvId}
+            setExpandedConvId={setExpandedConvId}
+            galleryCache={galleryCache}
+            busyId={busyId}
+            onChallenge={startChallenge}
+            studentName={data.studentName}
+          />
+        )}
       </div>
-
-      {activeTab === 'class' ? (
-        <ClassTab
-          grouped={grouped}
-          assignments={assignments}
-          openSubjects={openSubjects}
-          toggleSubject={toggleSubject}
-          selectedId={selectedId}
-          setSelectedId={setSelectedId}
-          selectedAssignment={selectedAssignment}
-          myConv={myConv}
-          studentName={data.studentName}
-          gallery={gallery}
-          galleryLoading={galleryLoading}
-          retrying={retrying}
-          handleRetry={handleRetry}
-        />
-      ) : (
-        <HistoryTab
-          convTree={convTree}
-          selectedConv={selectedConv}
-          setSelectedConv={setSelectedConv}
-          openNodes={openNodes}
-          toggleNode={toggleNode}
-          isOpen={isOpen}
-        />
-      )}
     </div>
   );
 }
 
-/* =========================== 우리 반 과제 탭 =========================== */
-function ClassTab({
-  grouped, assignments, openSubjects, toggleSubject,
-  selectedId, setSelectedId, selectedAssignment, myConv, studentName,
-  gallery, galleryLoading, retrying, handleRetry,
-}) {
-  return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 200px)', overflow: 'hidden', marginTop: '1rem' }}>
-      {/* 사이드바: 과목별 과제 */}
-      <div style={{
-        width: '280px', minWidth: '240px',
-        borderRight: '1px solid var(--border-color)',
-        overflowY: 'auto', padding: '1rem 0',
-        background: 'var(--bg-secondary)', flexShrink: 0,
-      }}>
-        <div style={{ padding: '0 1rem 0.75rem', fontSize: '0.95rem', fontWeight: 800, color: 'var(--text-primary)' }}>
-          🗂️ 작업장
-        </div>
+/* =========================== 할 일 =========================== */
+function TodoList({ groups, busyId, onChallenge }) {
+  if (groups.length === 0) {
+    return (
+      <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', marginTop: '1rem' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>🎉</div>
+        <p style={{ margin: 0 }}>지금 할 일이 없어요. 우리 반 과제를 모두 참여했어요!</p>
+      </div>
+    );
+  }
 
-        {assignments.length === 0 ? (
-          <p style={{ padding: '0 1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            아직 진행 중인 프로젝트가 없어요.
+  return (
+    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {groups.map(([subject, items]) => (
+        <div key={subject}>
+          <div className="subject-header">⚡ {subject}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {items.map((a) => (
+              <div key={a.id} className="card" style={{ padding: '0.85rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {a.title}
+                </span>
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                  👤 {a.participantCount}
+                </span>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={busyId === a.id}
+                  onClick={() => onChallenge(a.id, a.entryCode)}
+                  style={{ flexShrink: 0 }}
+                >
+                  {busyId === a.id ? '이동 중...' : '🚀 도전하기'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* =========================== 내 작업 =========================== */
+function MineList({
+  groups, activeById, expandedConvId, setExpandedConvId, galleryCache, busyId, onChallenge, studentName,
+}) {
+  if (groups.length === 0) {
+    return (
+      <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)', marginTop: '1rem' }}>
+        <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📭</div>
+        <p style={{ margin: 0 }}>아직 한 작업이 없어요. 위 활동 코드나 할 일에서 시작해 보세요!</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      {groups.map(([subject, items]) => (
+        <div key={subject}>
+          <div className="subject-header">⚡ {subject}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {items.map((conv) => {
+              const active = activeById[conv.assignment?.id];
+              const isExpanded = expandedConvId === conv.id;
+              const hasScore = Number.isFinite(conv.score);
+              const inProgress = conv.status === 'in_progress' || !hasScore;
+              return (
+                <div key={conv.id} className="card" style={{ padding: '0.85rem 1.1rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span style={{ flexShrink: 0, color: hasScore ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      {hasScore ? '✓' : '·'}
+                    </span>
+                    <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>
+                      {conv.assignment?.standards?.[1] || conv.assignment?.title || '제목 없음'}
+                    </span>
+                    {hasScore ? (
+                      <span className="badge badge-score" style={{ flexShrink: 0 }}>
+                        {conv.score}
+                        {Number.isFinite(getMaxScore(conv.assignment?.scoreOptions))
+                          ? `/${getMaxScore(conv.assignment.scoreOptions)}`
+                          : ''}점
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexShrink: 0 }}>진행 중</span>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                    {active && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        disabled={busyId === active.id}
+                        onClick={() => onChallenge(active.id, active.entryCode)}
+                      >
+                        {busyId === active.id ? '이동 중...' : (inProgress ? '✏️ 이어하기' : '✏️ 다시 도전')}
+                      </button>
+                    )}
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => setExpandedConvId(isExpanded ? null : conv.id)}
+                    >
+                      💬 대화 {isExpanded ? '닫기 ▴' : '보기 ▾'}
+                    </button>
+                  </div>
+
+                  {isExpanded && (
+                    <ConvDetail
+                      conv={conv}
+                      gallery={active ? galleryCache[active.entryCode] : null}
+                      studentName={studentName}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ConvDetail({ conv, gallery, studentName }) {
+  return (
+    <div style={{ marginTop: '0.9rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.9rem' }}>
+      {/* 대화 내용 */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+        {(conv.messages || []).length === 0 ? (
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: 0 }}>
+            {studentAnswerText(conv) || '(아직 작성한 대화가 없어요)'}
           </p>
         ) : (
-          grouped.map(([subject, items]) => (
-            <div key={subject}>
-              <button
-                onClick={() => toggleSubject(subject)}
-                style={{
-                  width: '100%', textAlign: 'left', padding: '0.5rem 1rem',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-              >
-                <span>⚡ {subject}</span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {openSubjects[subject] ? '▼' : '▶'}
-                </span>
-              </button>
-
-              {openSubjects[subject] && items.map((a) => {
-                const isSelected = selectedId === a.id;
-                return (
-                  <button
-                    key={a.id}
-                    onClick={() => setSelectedId(a.id)}
-                    style={{
-                      width: '100%', textAlign: 'left', padding: '0.4rem 1rem 0.4rem 2rem',
-                      background: isSelected ? 'rgba(0,102,204,0.10)' : 'none',
-                      border: 'none',
-                      borderLeft: isSelected ? '3px solid var(--primary)' : '3px solid transparent',
-                      cursor: 'pointer', fontSize: '0.85rem',
-                      color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
-                      display: 'flex', alignItems: 'center', gap: '0.4rem',
-                    }}
-                  >
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {a.hasParticipated ? '✓ ' : ''}{a.title}
-                    </span>
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-                      {a.participantCount}
-                    </span>
-                  </button>
-                );
-              })}
+          conv.messages.map((msg, i) => (
+            <div key={i} className={`chat-bubble chat-bubble-${msg.role}`} style={{ maxWidth: '90%' }}>
+              {(msg.role === 'bot' || msg.role === 'unicorn') && (
+                <div className="chat-sender">오늘배움봇</div>
+              )}
+              <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
             </div>
           ))
         )}
       </div>
 
-      {/* 가운데 패널 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-        {!selectedAssignment ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            height: '100%', color: 'var(--text-muted)', gap: '0.75rem',
+      {conv.feedback && (
+        <div className="score-feedback">
+          <strong>AI 피드백</strong> {stripMarkdown(conv.feedback)}
+        </div>
+      )}
+      {conv.higherScoreTip && (
+        <div className="score-feedback" style={{ marginTop: '0.5rem' }}>
+          <strong>💡 다음에 해볼 것</strong> {stripMarkdown(conv.higherScoreTip)}
+        </div>
+      )}
+
+      {/* AI 모범답안 */}
+      {gallery?.showExampleAnswers && gallery?.aiExampleAnswer && (
+        <div style={{ marginTop: '0.9rem' }}>
+          <div className="detail-label">🤖 AI 모범답안</div>
+          <div className="card" style={{
+            padding: '1rem',
+            border: '1.5px solid rgba(251, 191, 36, 0.45)',
+            background: 'rgba(251, 191, 36, 0.06)',
           }}>
-            <div style={{ fontSize: '3rem' }}>👈</div>
-            <p>왼쪽 작업장에서 프로젝트를 선택해 보세요.</p>
+            <p style={{ fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0, wordBreak: 'keep-all' }}>
+              {gallery.aiExampleAnswer}
+            </p>
           </div>
-        ) : (
-          <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-            <div style={{ marginBottom: '1.25rem' }}>
-              <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                {selectedAssignment.title}
-              </h2>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                {selectedAssignment.subject || '기타'}
-                {selectedAssignment.grade ? ` · ${selectedAssignment.grade}` : ''}
-                {' · '}👤 {selectedAssignment.participantCount}명 참여
-              </p>
-            </div>
+        </div>
+      )}
 
-            {/* 내 답변 */}
-            <div style={{ marginBottom: '1.5rem' }}>
-              <div style={{
-                fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)',
-                textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem',
-              }}>
-                🙋 내 답변
-              </div>
-              {myConv ? (
-                <div className="card" style={{ padding: '1.25rem' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                      {studentName}
-                      {myConv.approved && (
-                        <span style={{ marginLeft: '0.5rem', color: 'var(--primary)' }}>🪙 포인트 지급됨</span>
-                      )}
-                    </span>
-                    {Number.isFinite(myConv.score) && (
-                      <span className="badge badge-score">최고 {myConv.score}점</span>
-                    )}
-                  </div>
-                  <p style={{
-                    fontSize: '0.93rem', lineHeight: 1.65, color: 'var(--text-secondary)',
-                    margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all',
-                  }}>
-                    {studentAnswerText(myConv) || '(작성한 답변이 없어요)'}
-                  </p>
-                  {myConv.feedback && (
-                    <p style={{
-                      fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '0.75rem',
-                      borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem',
-                      lineHeight: 1.55, marginBottom: 0,
-                    }}>
-                      💬 {stripMarkdown(myConv.feedback)}
-                    </p>
-                  )}
-                  <button onClick={handleRetry} disabled={retrying} className="btn btn-primary btn-sm" style={{ marginTop: '0.9rem' }}>
-                    {retrying ? '이동 중...' : '✏️ 다시 도전하기'}
-                  </button>
-                  <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '0.6rem', marginBottom: 0 }}>
-                    점수가 오르면 오른 만큼만 포인트가 추가로 지급돼요. 점수가 내려가도 최고 기록은 그대로예요.
-                  </p>
+      {/* 명예의 전당 */}
+      {gallery && (gallery.gallery || []).length > 0 && (
+        <div style={{ marginTop: '0.9rem' }}>
+          <div className="detail-label">🏆 명예의 전당</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {gallery.gallery.map((item, i) => (
+              <div key={item.conversationId || i} className="card" style={{ padding: '0.9rem 1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                    {i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{item.studentName}
+                  </span>
+                  <span className="badge badge-score">
+                    {item.score}{Number.isFinite(item.maxScore) ? `/${item.maxScore}` : ''}점
+                  </span>
                 </div>
-              ) : (
-                <div className="card" style={{ padding: '1.25rem', textAlign: 'center' }}>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.9rem' }}>
-                    아직 이 프로젝트에 참여하지 않았어요.
-                  </p>
-                  <button onClick={handleRetry} disabled={retrying} className="btn btn-primary btn-sm">
-                    {retrying ? '이동 중...' : '🚀 지금 도전하기'}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* AI 모범답안 */}
-            {gallery?.showExampleAnswers && gallery?.aiExampleAnswer && (
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{
-                  fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)',
-                  textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem',
+                <p style={{
+                  fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-secondary)',
+                  margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all',
                 }}>
-                  🤖 AI 모범답안
-                </div>
-                <div className="card" style={{
-                  padding: '1.25rem',
-                  border: '1.5px solid rgba(251, 191, 36, 0.45)',
-                  background: 'rgba(251, 191, 36, 0.06)',
-                }}>
-                  <p style={{ fontSize: '0.93rem', lineHeight: 1.65, color: 'var(--text-secondary)', margin: 0, wordBreak: 'keep-all' }}>
-                    {gallery.aiExampleAnswer}
-                  </p>
-                </div>
+                  {stripMarkdown(item.lastMessage)}
+                </p>
               </div>
-            )}
-
-            {/* 명예의 전당 */}
-            <div>
-              <div style={{
-                fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)',
-                textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem',
-              }}>
-                🏆 명예의 전당
-              </div>
-              {galleryLoading && gallery === undefined ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '1.5rem' }}>
-                  <div className="loading-spinner" style={{ width: '28px', height: '28px' }} />
-                </div>
-              ) : !gallery || (gallery.gallery || []).length === 0 ? (
-                <div className="card" style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  <p style={{ margin: 0, fontSize: '0.9rem' }}>아직 등록된 우수 답변이 없어요.</p>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {gallery.gallery.map((item, i) => (
-                    <div key={item.conversationId || i} className="card" style={{ padding: '1.1rem 1.25rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                          {i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{item.studentName}
-                        </span>
-                        <span className="badge badge-score">
-                          {item.score}{Number.isFinite(item.maxScore) ? `/${item.maxScore}` : ''}점
-                        </span>
-                      </div>
-                      <p style={{
-                        fontSize: '0.93rem', lineHeight: 1.65, color: 'var(--text-secondary)',
-                        margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all',
-                      }}>
-                        {stripMarkdown(item.lastMessage)}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            ))}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* =========================== 내 학습 기록 탭 =========================== */
-function HistoryTab({ convTree, selectedConv, setSelectedConv, openNodes, toggleNode, isOpen }) {
-  const subjects = Object.keys(SUBJECT_PLANS);
-
-  return (
-    <div style={{ display: 'flex', height: 'calc(100vh - 200px)', overflow: 'hidden', marginTop: '1rem' }}>
-      {/* 사이드바: 교육과정 트리 */}
-      <div style={{
-        width: '280px', minWidth: '240px',
-        borderRight: '1px solid var(--border-color)',
-        overflowY: 'auto', padding: '1rem 0',
-        background: 'var(--bg-secondary)', flexShrink: 0,
-      }}>
-        {subjects.map((subject) => {
-          const planData = SUBJECT_PLANS[subject];
-          const grades = Object.keys(planData.grades || {}).sort();
-
-          return (
-            <div key={subject}>
-              <button
-                onClick={() => toggleNode(`sub_${subject}`)}
-                style={{
-                  width: '100%', textAlign: 'left', padding: '0.5rem 1rem',
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)',
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                }}
-              >
-                <span>{subject}</span>
-                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                  {isOpen(`sub_${subject}`) ? '▼' : '▶'}
-                </span>
-              </button>
-
-              {isOpen(`sub_${subject}`) && grades.map((grade) => {
-                const semesters = Object.keys(planData.grades[grade] || {}).sort();
-                return semesters.map((semester) => {
-                  const gradeLabel = `${grade}학년 ${semester}학기`;
-                  const gradeKey = `g_${subject}_${grade}_${semester}`;
-                  const units = planData.grades[grade][semester] || [];
-
-                  return (
-                    <div key={gradeKey}>
-                      <button
-                        onClick={() => toggleNode(gradeKey)}
-                        style={{
-                          width: '100%', textAlign: 'left', padding: '0.4rem 1.5rem',
-                          background: 'none', border: 'none', cursor: 'pointer',
-                          fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)',
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        }}
-                      >
-                        <span>{gradeLabel}</span>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                          {isOpen(gradeKey) ? '▼' : '▶'}
-                        </span>
-                      </button>
-
-                      {isOpen(gradeKey) && units.map((unitObj) => {
-                        const unitKey = `u_${subject}_${grade}_${semester}_${unitObj.unit}`;
-                        const lessons = unitObj.lessons || [];
-
-                        return (
-                          <div key={unitKey}>
-                            <button
-                              onClick={() => toggleNode(unitKey)}
-                              style={{
-                                width: '100%', textAlign: 'left', padding: '0.35rem 2rem',
-                                background: 'none', border: 'none', cursor: 'pointer',
-                                fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)',
-                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                              }}
-                            >
-                              <span style={{ flex: 1, textAlign: 'left' }}>{unitObj.unit}</span>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '0.25rem' }}>
-                                {isOpen(unitKey) ? '▼' : '▶'}
-                              </span>
-                            </button>
-
-                            {isOpen(unitKey) && lessons.map((lesson) => {
-                              const conv = convTree?.[subject]?.[grade]?.[semester]?.[unitObj.unit]?.[lesson];
-                              const isDone = conv?.status === 'completed';
-                              const isSelected = selectedConv?.id === conv?.id;
-
-                              return (
-                                <button
-                                  key={lesson}
-                                  onClick={() => conv ? setSelectedConv(conv) : undefined}
-                                  style={{
-                                    width: '100%', textAlign: 'left', padding: '0.3rem 2.5rem',
-                                    background: isSelected ? 'rgba(0,102,204,0.08)' : 'none',
-                                    border: 'none',
-                                    borderLeft: isSelected ? '3px solid var(--colors-primary)' : '3px solid transparent',
-                                    cursor: conv ? 'pointer' : 'default',
-                                    fontSize: '0.8rem',
-                                    color: isDone ? 'var(--text-primary)' : 'var(--text-muted)',
-                                    display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                  }}
-                                >
-                                  <span style={{ fontSize: '0.7rem' }}>{isDone ? '✓' : '·'}</span>
-                                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                                    {lesson}
-                                  </span>
-                                  {isDone && Number.isFinite(conv.score) && (
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--colors-primary)', fontWeight: 600, flexShrink: 0 }}>
-                                      {conv.score}점
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                });
-              })}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* 대화 내용 뷰어 */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-        {!selectedConv ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            height: '100%', color: 'var(--text-muted)', gap: '0.75rem',
-          }}>
-            <div style={{ fontSize: '3rem' }}>👈</div>
-            <p>왼쪽에서 완료한 차시를 선택하면 대화 내용을 볼 수 있어요.</p>
-            <p style={{ fontSize: '0.85rem' }}>완료한 차시는 <strong>✓</strong>로 표시됩니다.</p>
-          </div>
-        ) : (
-          <div style={{ maxWidth: '680px' }}>
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                {selectedConv.assignment?.standards?.[1] || selectedConv.assignment?.title}
-              </h2>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                {selectedConv.assignment?.subject} · {selectedConv.assignment?.grade} · {selectedConv.assignment?.standards?.[0]}
-              </p>
-              {Number.isFinite(selectedConv.score) && (
-                <span className="badge badge-score" style={{ marginTop: '0.5rem', display: 'inline-block' }}>
-                  {selectedConv.score}
-                  {Number.isFinite(getMaxScore(selectedConv.assignment?.scoreOptions))
-                    ? `/${getMaxScore(selectedConv.assignment.scoreOptions)}`
-                    : ''}점
-                </span>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.5rem' }}>
-              {(selectedConv.messages || []).map((msg, i) => (
-                <div key={i} className={`chat-bubble chat-bubble-${msg.role}`} style={{ maxWidth: '85%' }}>
-                  {(msg.role === 'bot' || msg.role === 'unicorn') && (
-                    <div className="chat-sender">오늘배움봇</div>
-                  )}
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{msg.content}</div>
-                </div>
-              ))}
-            </div>
-
-            {selectedConv.feedback && (
-              <div className="score-feedback">
-                <strong>AI 피드백</strong> {selectedConv.feedback}
-              </div>
-            )}
-            {selectedConv.higherScoreTip && (
-              <div className="score-feedback" style={{ marginTop: '0.75rem' }}>
-                <strong>💡 다음에 해볼 것</strong> {selectedConv.higherScoreTip}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
