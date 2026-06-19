@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 import BotAvatar from '@/components/BotAvatar';
-import { stripMarkdown } from '@/lib/textUtils';
 import { groupBySubject } from '@/lib/studentPortfolio';
 
 // 학급코드만으로 로그인 없이 우리 반 프로젝트와 명예의 전당을 둘러보는 게스트 화면.
@@ -19,18 +18,7 @@ export default function ClassBrowsePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [openSubjects, setOpenSubjects] = useState({});
-  const [selectedId, setSelectedId] = useState(null);
-
-  // 명예의 전당 캐시 (entryCode 기준)
-  const [galleryCache, setGalleryCache] = useState({});
-  const [galleryLoading, setGalleryLoading] = useState(false);
-
   const grouped = useMemo(() => groupBySubject(assignments), [assignments]);
-  const selectedAssignment = useMemo(
-    () => assignments.find((a) => a.id === selectedId) || null,
-    [assignments, selectedId]
-  );
 
   useEffect(() => {
     if (!code) return;
@@ -41,11 +29,6 @@ export default function ClassBrowsePage() {
         if (data.success) {
           setClassName(data.className || '');
           setAssignments(data.assignments || []);
-          const open = {};
-          for (const a of data.assignments || []) {
-            open[a.subject?.trim() || '기타'] = true;
-          }
-          setOpenSubjects(open);
         } else {
           setError(data.error || '학급을 찾을 수 없습니다.');
         }
@@ -53,31 +36,6 @@ export default function ClassBrowsePage() {
       .catch(() => setError('서버 연결에 실패했어요.'))
       .finally(() => setLoading(false));
   }, [code]);
-
-  // 선택한 과제의 명예의 전당 로드
-  useEffect(() => {
-    if (!selectedAssignment?.entryCode) return;
-    const entryCode = selectedAssignment.entryCode;
-    if (galleryCache[entryCode] !== undefined) return;
-
-    setGalleryLoading(true);
-    fetch(`/api/assignments/gallery?code=${entryCode}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setGalleryCache((prev) => ({
-          ...prev,
-          [entryCode]: data.success ? data : { gallery: [] },
-        }));
-      })
-      .catch(() => {
-        setGalleryCache((prev) => ({ ...prev, [entryCode]: { gallery: [] } }));
-      })
-      .finally(() => setGalleryLoading(false));
-  }, [selectedAssignment, galleryCache]);
-
-  const toggleSubject = (subject) => {
-    setOpenSubjects((prev) => ({ ...prev, [subject]: !prev[subject] }));
-  };
 
   if (loading) {
     return (
@@ -108,8 +66,6 @@ export default function ClassBrowsePage() {
     );
   }
 
-  const gallery = selectedAssignment ? galleryCache[selectedAssignment.entryCode] : null;
-
   return (
     <div className="page-container">
       <nav className="navbar">
@@ -124,202 +80,60 @@ export default function ClassBrowsePage() {
         </Link>
       </nav>
 
-      <div style={{ display: 'flex', height: 'calc(100vh - 56px)', overflow: 'hidden' }}>
-        {/* 작업장 사이드바 */}
-        <div style={{
-          width: '280px',
-          minWidth: '240px',
-          borderRight: '1px solid var(--border-color)',
-          overflowY: 'auto',
-          padding: '1rem 0',
-          background: 'var(--bg-secondary)',
-          flexShrink: 0,
-        }}>
-          <div style={{
-            padding: '0 1rem 0.75rem',
-            fontSize: '0.95rem',
-            fontWeight: 800,
-            color: 'var(--text-primary)',
-          }}>
-            🗂️ 작업장
+      <div style={{ maxWidth: '720px', margin: '0 auto', padding: '1rem 1rem 3rem', width: '100%' }}>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', margin: '0.5rem 0 1.25rem', textAlign: 'center' }}>
+          로그인 없이 우리 반 프로젝트와 명예의 전당을 둘러보고 있어요.
+        </p>
+
+        {assignments.length === 0 ? (
+          <div className="card" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <div style={{ fontSize: '2.5rem', marginBottom: '0.5rem' }}>📭</div>
+            <p style={{ margin: 0 }}>아직 진행 중인 프로젝트가 없어요.</p>
           </div>
-
-          {assignments.length === 0 ? (
-            <p style={{ padding: '0 1rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              아직 진행 중인 프로젝트가 없어요.
-            </p>
-          ) : (
-            grouped.map(([subject, items]) => (
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {grouped.map(([subject, items]) => (
               <div key={subject}>
-                <button
-                  onClick={() => toggleSubject(subject)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: '0.5rem 1rem',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    fontWeight: 700,
-                    fontSize: '0.9rem',
-                    color: 'var(--text-primary)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
-                >
-                  <span>⚡ {subject}</span>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                    {openSubjects[subject] ? '▼' : '▶'}
-                  </span>
-                </button>
-
-                {openSubjects[subject] && items.map((a) => {
-                  const isSelected = selectedId === a.id;
-                  return (
-                    <button
-                      key={a.id}
-                      onClick={() => setSelectedId(a.id)}
-                      style={{
-                        width: '100%',
-                        textAlign: 'left',
-                        padding: '0.4rem 1rem 0.4rem 2rem',
-                        background: isSelected ? 'rgba(0,102,204,0.10)' : 'none',
-                        border: 'none',
-                        borderLeft: isSelected ? '3px solid var(--primary)' : '3px solid transparent',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem',
-                        color: isSelected ? 'var(--text-primary)' : 'var(--text-secondary)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                      }}
-                    >
-                      <span style={{
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {a.title}
-                      </span>
-                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-                        {a.participantCount}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* 가운데 패널 */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem' }}>
-          {!selectedAssignment ? (
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              height: '100%',
-              color: 'var(--text-muted)',
-              gap: '0.75rem',
-            }}>
-              <div style={{ fontSize: '3rem' }}>👈</div>
-              <p>왼쪽 작업장에서 프로젝트를 선택해 보세요.</p>
-            </div>
-          ) : (
-            <div style={{ maxWidth: '720px', margin: '0 auto' }}>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-                  {selectedAssignment.title}
-                </h2>
-                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                  {selectedAssignment.subject || '기타'}
-                  {selectedAssignment.grade ? ` · ${selectedAssignment.grade}` : ''}
-                  {' · '}👤 {selectedAssignment.participantCount}명 참여
-                </p>
-              </div>
-
-              {/* AI 모범답안 */}
-              {gallery?.showExampleAnswers && gallery?.aiExampleAnswer && (
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <div style={{
-                    fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)',
-                    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem',
-                  }}>
-                    🤖 AI 모범답안
-                  </div>
-                  <div className="card" style={{
-                    padding: '1.25rem',
-                    border: '1.5px solid rgba(251, 191, 36, 0.45)',
-                    background: 'rgba(251, 191, 36, 0.06)',
-                  }}>
-                    <p style={{
-                      fontSize: '0.93rem', lineHeight: 1.65, color: 'var(--text-secondary)',
-                      margin: 0, wordBreak: 'keep-all',
-                    }}>
-                      {gallery.aiExampleAnswer}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* 명예의 전당 */}
-              <div>
-                <div style={{
-                  fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-muted)',
-                  textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.5rem',
-                }}>
-                  🏆 명예의 전당
-                </div>
-                {galleryLoading && gallery === undefined ? (
-                  <div style={{ display: 'flex', justifyContent: 'center', padding: '1.5rem' }}>
-                    <div className="loading-spinner" style={{ width: '28px', height: '28px' }} />
-                  </div>
-                ) : !gallery || (gallery.gallery || []).length === 0 ? (
-                  <div className="card" style={{ padding: '1.25rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                    <p style={{ margin: 0, fontSize: '0.9rem' }}>아직 등록된 우수 답변이 없어요.</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {gallery.gallery.map((item, i) => (
-                      <div key={item.conversationId || i} className="card" style={{ padding: '1.1rem 1.25rem' }}>
-                        <div style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          marginBottom: '0.5rem',
-                        }}>
-                          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                            {i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{item.studentName}
-                          </span>
-                          <span className="badge badge-score">
-                            {item.score}{Number.isFinite(item.maxScore) ? `/${item.maxScore}` : ''}점
-                          </span>
-                        </div>
-                        <p style={{
-                          fontSize: '0.93rem', lineHeight: 1.65, color: 'var(--text-secondary)',
-                          margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all',
-                        }}>
-                          {stripMarkdown(item.lastMessage)}
-                        </p>
+                <div className="subject-header">⚡ {subject}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {items.map((a) => (
+                    <div key={a.id} className="card" style={{ padding: '0.85rem 1.1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                        <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>
+                          {a.title}
+                        </span>
+                        <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                          👤 {a.participantCount}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      {a.grade && (
+                        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0.25rem 0 0' }}>
+                          {a.grade}
+                        </p>
+                      )}
+                      {a.entryCode && (
+                        <div style={{ marginTop: '0.6rem' }}>
+                          <a className="btn btn-ghost btn-sm" href={`/gallery/${a.entryCode}`}>
+                            🏆 명예의 전당
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
+            ))}
+          </div>
+        )}
 
-              {/* 로그인 안내 */}
-              <div className="card" style={{ marginTop: '1.5rem', padding: '1.1rem 1.25rem', textAlign: 'center' }}>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                  내 답변을 확인하거나 다시 도전하려면 로그인하세요.
-                </p>
-                <Link href="/dashboard" className="btn btn-primary btn-sm">
-                  🙋 내 대시보드 열기
-                </Link>
-              </div>
-            </div>
-          )}
+        {/* 로그인 안내 */}
+        <div className="card" style={{ marginTop: '1.5rem', padding: '1.1rem 1.25rem', textAlign: 'center' }}>
+          <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+            내 답변을 확인하거나 다시 도전하려면 로그인하세요.
+          </p>
+          <Link href="/dashboard" className="btn btn-primary btn-sm">
+            🙋 내 대시보드 열기
+          </Link>
         </div>
       </div>
     </div>

@@ -96,7 +96,7 @@ export default function ChatPage() {
 
         setAssignment(data.assignment);
 
-        // Read credentials from sessionStorage (set on home page)
+        // Read credentials from sessionStorage (set on dashboard before handoff)
         let studentNameVal = '';
         let studentPasswordVal = '';
         try {
