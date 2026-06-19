@@ -389,21 +389,29 @@ function TodoList({ groups, busyId, onChallenge }) {
           <div className="subject-header">⚡ {subject}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {items.map((a) => (
-              <div key={a.id} className="card" style={{ padding: '0.85rem 1.1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {a.title}
-                </span>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexShrink: 0 }}>
-                  👤 {a.participantCount}
-                </span>
-                <button
-                  className="btn btn-primary btn-sm"
-                  disabled={busyId === a.id}
-                  onClick={() => onChallenge(a.id, a.entryCode)}
-                  style={{ flexShrink: 0 }}
-                >
-                  {busyId === a.id ? '이동 중...' : '🚀 도전하기'}
-                </button>
+              <div key={a.id} className="card" style={{ padding: '0.85rem 1.1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: 600, color: 'var(--text-primary)', minWidth: 0 }}>
+                    {a.title}
+                  </span>
+                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', flexShrink: 0 }}>
+                    👤 {a.participantCount}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={busyId === a.id}
+                    onClick={() => onChallenge(a.id, a.entryCode)}
+                  >
+                    {busyId === a.id ? '이동 중...' : '🚀 도전하기'}
+                  </button>
+                  {a.entryCode && (
+                    <a className="btn btn-ghost btn-sm" href={`/gallery/${a.entryCode}`}>
+                      🏆 명예의 전당
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -474,6 +482,11 @@ function MineList({
                     >
                       💬 대화 {isExpanded ? '닫기 ▴' : '보기 ▾'}
                     </button>
+                    {active?.entryCode && (
+                      <a className="btn btn-ghost btn-sm" href={`/gallery/${active.entryCode}`}>
+                        🏆 명예의 전당
+                      </a>
+                    )}
                   </div>
 
                   {isExpanded && (
@@ -537,33 +550,6 @@ function ConvDetail({ conv, gallery, studentName }) {
             <p style={{ fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-secondary)', margin: 0, wordBreak: 'keep-all' }}>
               {gallery.aiExampleAnswer}
             </p>
-          </div>
-        </div>
-      )}
-
-      {/* 명예의 전당 */}
-      {gallery && (gallery.gallery || []).length > 0 && (
-        <div style={{ marginTop: '0.9rem' }}>
-          <div className="detail-label">🏆 명예의 전당</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {gallery.gallery.map((item, i) => (
-              <div key={item.conversationId || i} className="card" style={{ padding: '0.9rem 1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                  <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                    {i === 0 ? '🥇 ' : i === 1 ? '🥈 ' : i === 2 ? '🥉 ' : ''}{item.studentName}
-                  </span>
-                  <span className="badge badge-score">
-                    {item.score}{Number.isFinite(item.maxScore) ? `/${item.maxScore}` : ''}점
-                  </span>
-                </div>
-                <p style={{
-                  fontSize: '0.9rem', lineHeight: 1.6, color: 'var(--text-secondary)',
-                  margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'keep-all',
-                }}>
-                  {stripMarkdown(item.lastMessage)}
-                </p>
-              </div>
-            ))}
           </div>
         </div>
       )}
