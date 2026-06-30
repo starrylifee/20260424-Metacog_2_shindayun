@@ -410,6 +410,15 @@ export default function GalleryPage() {
                     </span>
                   </div>
 
+                  {item.retryCount > 0 && (
+                    <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginBottom: '0.6rem' }}>
+                      🔄 {item.retryCount}번 다시 도전해서 올린 점수예요
+                      {Array.isArray(item.scoreHistory) && item.scoreHistory.length > 1 && (
+                        <span style={{ marginLeft: '0.4rem' }}>({item.scoreHistory.join(' → ')})</span>
+                      )}
+                    </div>
+                  )}
+
                   <p style={{
                     fontSize: '0.95rem',
                     lineHeight: 1.65,

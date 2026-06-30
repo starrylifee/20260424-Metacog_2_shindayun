@@ -32,6 +32,18 @@ function formatConversationScore(score) {
   return Number.isFinite(score) ? `${score}점` : '-';
 }
 
+// 재도전 이력: 회차별 점수 추이와 재도전 횟수를 뽑아낸다 (옛 데이터엔 attempts가 없을 수 있음)
+function getRetryInfo(conversation) {
+  const attempts = Array.isArray(conversation.attempts) ? conversation.attempts : [];
+  const history = attempts
+    .map((a) => a.score)
+    .filter((s) => Number.isFinite(s));
+  const retryCount = Number.isFinite(conversation.retryCount)
+    ? conversation.retryCount
+    : Math.max(0, attempts.length - 1);
+  return { history, retryCount };
+}
+
 export default function AssignmentDetail() {
   const router = useRouter();
   const params = useParams();
@@ -737,6 +749,7 @@ export default function AssignmentDetail() {
                     <th>학생</th>
                     <th>상태</th>
                     <th>점수</th>
+                    <th>재도전</th>
                     <th>시작 시간</th>
                     <th>🏆 명예의 전당</th>
                     <th>관리</th>
@@ -747,6 +760,7 @@ export default function AssignmentDetail() {
                     const status = getStatusLabel(conversation);
                     const isSelected = selectedConv?.id === conversation.id;
                     const displayName = conversation.studentName || '-';
+                    const { history: scoreHistory, retryCount } = getRetryInfo(conversation);
 
                     return (
                       <tr key={conversation.id}>
@@ -760,6 +774,22 @@ export default function AssignmentDetail() {
                           <span className={`badge ${status.className}`}>{status.text}</span>
                         </td>
                         <td>{formatConversationScore(conversation.score)}</td>
+                        <td>
+                          {retryCount > 0 ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                              <span className="badge badge-active" style={{ width: 'fit-content' }}>
+                                🔄 {retryCount}회
+                              </span>
+                              {scoreHistory.length > 1 && (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                                  {scoreHistory.join(' → ')}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: 'var(--text-muted)' }}>-</span>
+                          )}
+                        </td>
                         <td className="card-meta">{formatDate(conversation.startedAt)}</td>
                         <td>
                           {conversation.status === 'completed' && (
@@ -812,18 +842,74 @@ export default function AssignmentDetail() {
                   )}
                 </h3>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {(selectedConv.messages || []).map((message, index) => (
-                    <div key={index} className={`chat-bubble chat-bubble-${message.role}`} style={{ maxWidth: '85%' }}>
-                      {(message.role === 'bot' || message.role === 'unicorn') && <div className="chat-sender">오늘배움봇</div>}
-                      <div style={{ whiteSpace: 'pre-wrap' }}>
-                        {(message.role === 'bot' || message.role === 'unicorn')
-                          ? stripMarkdown(message.content)
-                          : message.content}
-                      </div>
+                {(() => {
+                  const renderMessages = (messages) => (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                      {(messages || []).map((message, index) => (
+                        <div key={index} className={`chat-bubble chat-bubble-${message.role}`} style={{ maxWidth: '85%' }}>
+                          {(message.role === 'bot' || message.role === 'unicorn') && <div className="chat-sender">오늘배움봇</div>}
+                          <div style={{ whiteSpace: 'pre-wrap' }}>
+                            {(message.role === 'bot' || message.role === 'unicorn')
+                              ? stripMarkdown(message.content)
+                              : message.content}
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  );
+
+                  const attempts = Array.isArray(selectedConv.attempts) ? selectedConv.attempts : [];
+                  // 재도전 기록이 없으면(옛 데이터 포함) 기존처럼 단일 대화만 표시
+                  if (attempts.length <= 1) {
+                    return renderMessages(selectedConv.messages);
+                  }
+
+                  // 재도전이 있으면 회차별 대화를 모두 수합해 표시 (최고점 회차에 🏆)
+                  const bestScore = Math.max(
+                    ...attempts.map((a) => (Number.isFinite(a.score) ? a.score : -Infinity))
+                  );
+                  let bestMarked = false;
+                  return (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                      {attempts.map((att, i) => {
+                        const isBest = !bestMarked && Number.isFinite(att.score) && att.score === bestScore;
+                        if (isBest) bestMarked = true;
+                        return (
+                          <div
+                            key={i}
+                            style={{
+                              border: '1px solid var(--border-color)',
+                              borderRadius: '0.75rem',
+                              padding: '0.85rem 1rem',
+                              background: isBest ? 'rgba(34,197,94,0.05)' : 'transparent',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+                              <strong style={{ fontSize: '0.9rem' }}>
+                                {att.attempt ?? i + 1}회차
+                              </strong>
+                              <span className="badge badge-score">
+                                {Number.isFinite(att.score) ? `${att.score}점` : '미채점'}
+                              </span>
+                              {isBest && <span className="badge badge-active">🏆 최고점</span>}
+                              {att.at && (
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.78rem' }}>
+                                  {formatDate(att.at)}
+                                </span>
+                              )}
+                            </div>
+                            {renderMessages(att.messages)}
+                            {att.feedback && (
+                              <div className="score-feedback" style={{ marginTop: '0.6rem' }}>
+                                <strong>AI 피드백</strong> {stripMarkdown(att.feedback)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 {selectedConv.feedback && (
                   <div className="score-feedback" style={{ marginTop: '1rem' }}>

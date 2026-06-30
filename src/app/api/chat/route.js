@@ -707,6 +707,22 @@ export async function POST(request) {
         updateData.bestMessages = bestMessages;
       }
 
+      // 시도 이력 누적: 채점이 끝난 이번 도전을 한 회차로 기록 (회차·점수·시각)
+      // serverTimestamp()는 배열 원소에 못 넣으므로 messages와 같은 ISO 문자열 사용
+      const prevAttempts = Array.isArray(conversation.attempts) ? conversation.attempts : [];
+      updateData.attempts = [
+        ...prevAttempts,
+        {
+          attempt: prevAttempts.length + 1,
+          score: Number.isFinite(score) ? score : null,
+          at: new Date().toISOString(),
+          // 교사가 회차별 대화를 모두 확인할 수 있도록 이번 도전의 전체 대화·피드백을 보존
+          messages: updatedMessages,
+          feedback: safeFeedback,
+        },
+      ];
+      updateData.retryCount = prevAttempts.length; // 첫 시도 제외 = 재도전 횟수
+
       updateData.status = 'completed';
       updateData.completedAt = FieldValue.serverTimestamp();
       updateData.sessionTokenHash = null;

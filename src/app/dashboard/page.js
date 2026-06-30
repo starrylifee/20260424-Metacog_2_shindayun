@@ -466,6 +466,15 @@ function MineList({
                     )}
                   </div>
 
+                  {conv.retryCount > 0 && (
+                    <div style={{ marginTop: '0.4rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      🔄 재도전 {conv.retryCount}회
+                      {Array.isArray(conv.scoreHistory) && conv.scoreHistory.length > 1 && (
+                        <span style={{ marginLeft: '0.4rem' }}>{conv.scoreHistory.join(' → ')}</span>
+                      )}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.6rem', flexWrap: 'wrap' }}>
                     {active && (
                       <button

@@ -55,6 +55,7 @@ export async function GET(request) {
         const messages = Array.isArray(data.messages) ? data.messages : [];
         const studentMessages = messages.filter((m) => m.role === 'student');
         const fullAnswer = studentMessages.map((m) => m.content).join('\n\n').trim();
+        const attempts = Array.isArray(data.attempts) ? data.attempts : [];
         return {
           conversationId: doc.id,
           score: data.score,
@@ -62,6 +63,11 @@ export async function GET(request) {
           studentName: anonymizeName(data.studentName),
           lastMessage: fullAnswer,
           feedback: data.feedback || '',
+          // 재도전 노력 배지: 재도전 횟수 + 점수 추이
+          retryCount: Number.isFinite(data.retryCount)
+            ? data.retryCount
+            : Math.max(0, attempts.length - 1),
+          scoreHistory: attempts.map((a) => a.score),
         };
       })
       .filter((item) => {

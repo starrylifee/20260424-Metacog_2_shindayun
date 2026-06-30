@@ -82,6 +82,7 @@ export async function GET(request) {
         const data = doc.data();
         const assignment = assignmentMap[data.assignmentId] || null;
         myConvByAssignment[data.assignmentId] = data;
+        const attempts = Array.isArray(data.attempts) ? data.attempts : [];
         conversations.push({
           id: doc.id,
           status: data.status,
@@ -93,6 +94,12 @@ export async function GET(request) {
           messages: data.messages || [],
           completedAt: data.completedAt || null,
           startedAt: data.startedAt || null,
+          // 재도전 이력: 회차별 점수 추이 + 재도전 횟수
+          attempts,
+          scoreHistory: attempts.map((a) => a.score),
+          retryCount: Number.isFinite(data.retryCount)
+            ? data.retryCount
+            : Math.max(0, attempts.length - 1),
           assignment: assignment
             ? {
                 id: assignment.id,
@@ -128,6 +135,7 @@ export async function GET(request) {
       const myScore = mine
         ? (Number.isFinite(mine.bestScore) ? mine.bestScore : (mine.score ?? null))
         : null;
+      const myAttempts = Array.isArray(mine?.attempts) ? mine.attempts : [];
       return {
         id: a.id,
         title: a.title || '',
@@ -138,6 +146,11 @@ export async function GET(request) {
         hasParticipated: Boolean(mine),
         myScore,
         myApproved: Boolean(mine?.approved),
+        // 재도전 이력: 내 점수 추이 + 재도전 횟수
+        myScoreHistory: myAttempts.map((at) => at.score),
+        myRetryCount: Number.isFinite(mine?.retryCount)
+          ? mine.retryCount
+          : Math.max(0, myAttempts.length - 1),
       };
     });
 
